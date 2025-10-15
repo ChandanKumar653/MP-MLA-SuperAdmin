@@ -71,7 +71,7 @@ const FormBuilderPage = ({ existingForm = [], onSave }) => {
 
   // ---- Save ----
   const saveForm = () => {
-    if (onSave) onSave(fields); // ✅ Pass to parent MenuManagerPage
+    if (onSave) onSave(fields); 
   };
 
   // ---- Edit Field ----

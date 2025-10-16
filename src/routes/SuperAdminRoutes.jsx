@@ -1,11 +1,11 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "../layouts/Layout";
-import DashboardPage from "../pages/Dashboard";
+// import DashboardPage from "../pages/Dashboard";
 import FormViewerPage from "../pages/FormViewerPage";
-import MenuManagerPage from "../pages/MenuManagerPage";
+// import MenuManagerPage from "../pages/MenuManagerPage";
 
 const SuperAdminRoutes = () => {
-  const menus = JSON.parse(localStorage.getItem("menuTree") || "[]");
+  // const menus = JSON.parse(localStorage.getItem("menuTree") || "[]");
 
   const generateRoutes = (list) =>
     list.map((menu) => {
@@ -29,9 +29,9 @@ const SuperAdminRoutes = () => {
   return (
     <Routes>
       <Route path="/" element={<Layout role="superadmin" />}>
-        <Route path="dashboard" element={<DashboardPage />} />
+        {/* <Route path="dashboard" element={<DashboardPage />} />
         <Route path="menus" element={<MenuManagerPage />} />
-        {generateRoutes(menus)}
+        {generateRoutes(menus)} */}
         {/* <Route path="*" element={<Navigate to="dashboard" replace />} /> */}
       </Route>
     </Routes>

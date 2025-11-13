@@ -1,7 +1,9 @@
 import { Avatar, Box, Typography, IconButton } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
-
+import { useContext } from "react";
+import { AuthContext } from "../context/AuthContext";
 const TopBar = ({ onMenuToggle }) => {
+  const {user}=useContext(AuthContext);
   return (
     <Box className="flex justify-between items-center p-4 bg-white rounded-xl shadow-sm">
       {/* Left: Hamburger for mobile */}
@@ -50,7 +52,7 @@ const TopBar = ({ onMenuToggle }) => {
               Ck
             </Typography>
             <Typography variant="caption" className="text-gray-500">
-              Admin
+              {user?.role}
             </Typography>
           </Box>
         </Box>

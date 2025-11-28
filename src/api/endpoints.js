@@ -23,7 +23,7 @@ export const apiEndpoints = {
     register: (data) => api.post("/auth/register", data),
   },
    menus: {
-    getAll: (data) => api.post("/admin/tenant-schema-all-data",data),
+    getAll: (tenantId) => api.get(`/admin/tenant-schema/${tenantId}`),
     save: (data) => api.post("/admin/tenant-schema", data),
   },
 };

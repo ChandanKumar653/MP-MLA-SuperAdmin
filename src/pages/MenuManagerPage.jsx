@@ -1,375 +1,302 @@
-import React, { useContext, useState, useMemo, useEffect, useCallback } from "react";
+
+import React, {
+  useContext,
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import {
   Button,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
+  DialogTitle,
   TextField,
-  FormControlLabel,
   Switch,
+  FormControlLabel,
   IconButton,
-  useTheme,
-  useMediaQuery,
-  Chip,
   Alert,
-  Box,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
-import {
-  Add,
-  Delete,
-  Edit,
-  List,
-  Save,
-  CompareArrows,
-  CheckCircle,
-} from "@mui/icons-material";
+import { Add, Delete, Edit, List, Save, CheckCircle } from "@mui/icons-material";
+
 import { MenuContext } from "../context/MenuContext";
 import FormBuilderPage from "./FormBuilderPage";
 
-// Custom diff function
-const computeMenuDiff = (original, current) => {
-  const diffs = [];
-  const compareNodes = (origNode, currNode, path = []) => {
-    if (!origNode && currNode) {
-      diffs.push({ kind: 'N', path, value: currNode });
-      return;
-    }
-    if (origNode && !currNode) {
-      diffs.push({ kind: 'D', path, value: origNode });
-      return;
-    }
-    if (origNode && currNode) {
-      if (origNode.id !== currNode.id) {
-        diffs.push({ kind: 'E', path, oldValue: origNode, newValue: currNode });
-      } else {
-        const hasChanges = 
-          origNode.title !== currNode.title ||
-          origNode.hasForm !== currNode.hasForm ||
-          origNode.tableName !== currNode.tableName ||
-          JSON.stringify(origNode.formSchema) !== JSON.stringify(currNode.formSchema);
+/* ---------------- Utilities ---------------- */
+const slugify = (str) =>
+  (str || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
-        if (hasChanges) {
-          diffs.push({ kind: 'E', path, oldValue: origNode, newValue: currNode });
-        }
-        if (origNode.children?.length !== currNode.children?.length) {
-          diffs.push({ kind: 'A', path, oldValue: origNode.children, newValue: currNode.children });
-        }
-        const origChildrenMap = new Map(origNode.children?.map(c => [c.id, c]) || []);
-        currNode.children?.forEach((child, index) => {
-          const origChild = origChildrenMap.get(child.id);
-          compareNodes(origChild, child, [...path, 'children', index]);
-        });
-      }
-    }
-  };
+/* ---------------- MAIN ---------------- */
+export default function MenuManagerPage() {
+  const { menus, setMenus, saveMenuSchema } = useContext(MenuContext);
 
-  current.forEach((currNode, index) => {
-    const origNode = original[index];
-    compareNodes(origNode, currNode, [index]);
-  });
-  return diffs;
-};
+  const tabs = menus?.tabs || [];
 
-const MenuManagerPage = () => {
-  const { menus: originalMenus, setMenus, saveMenuSchema } = useContext(MenuContext);
-  const [openDialog, setOpenDialog] = useState(false);
   const [editingMenu, setEditingMenu] = useState(null);
-  const [showFormBuilder, setShowFormBuilder] = useState(null);
-  const [validationError, setValidationError] = useState("");
-  const [lastSavedMenus, setLastSavedMenus] = useState([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [formBuilder, setFormBuilder] = useState(null);
 
+  const initialized = useRef(false);
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down("md"));
 
-  // Safe menus
-  const safeMenus = useMemo(() => {
-    try {
-      if (typeof originalMenus === "string") return JSON.parse(originalMenus);
-      if (Array.isArray(originalMenus)) return originalMenus;
-      return [];
-    } catch {
-      return [];
-    }
-  }, [originalMenus]);
+  /* ---------------- Track Saved Tabs ---------------- */
+  const [lastSavedTabs, setLastSavedTabs] = useState([]);
 
-  // Initialize lastSavedMenus with initial menus
   useEffect(() => {
-    if (lastSavedMenus.length === 0 && safeMenus.length > 0) {
-      setLastSavedMenus(JSON.parse(JSON.stringify(safeMenus)));
+    if (!initialized.current && Array.isArray(tabs)) {
+      initialized.current = true;
+      setLastSavedTabs(JSON.parse(JSON.stringify(tabs)));
     }
-  }, [safeMenus, lastSavedMenus]);
+  }, [tabs]);
 
-  // Compute differences
-  const { differences, hasChanges } = useMemo(() => {
-    const diffs = computeMenuDiff(lastSavedMenus, safeMenus);
-    return { differences: diffs, hasChanges: diffs.length > 0 };
-  }, [lastSavedMenus, safeMenus]);
+  /* ---------------- Diff Checker ---------------- */
+  const hasChanges = useMemo(() => {
+    return JSON.stringify(lastSavedTabs) !== JSON.stringify(tabs);
+  }, [lastSavedTabs, tabs]);
 
-  // Validate before save
-  const validateBeforeSave = useCallback(() => {
-    const tableNameRegex = /^[a-zA-Z0-9_-]+$/;
+  /* ---------------- Validation ---------------- */
+  const [validationError, setValidationError] = useState("");
 
-    const check = (list) => {
+  useEffect(() => {
+    const validate = (list) => {
       for (const m of list) {
-        if (m.hasForm) {
-          if (!m.tableName) {
-            return `Menu "${m.title || "(Untitled)"}" needs a tableName`;
-          }
-          if (!tableNameRegex.test(m.tableName)) {
-            return `tableName "${m.tableName}" contains invalid characters`;
-          }
-        }
-        if (m.children && m.children.length > 0) {
-          const childErr = check(m.children);
-          if (childErr) return childErr;
+        if (m.hasForm && !m.tableName)
+          return `Menu "${m.title}" requires tableName`;
+
+        if (m.children?.length) {
+          const err = validate(m.children);
+          if (err) return err;
         }
       }
       return null;
     };
 
-    return check(safeMenus);
-  }, [safeMenus]);
+    setValidationError(validate(tabs) || "");
+  }, [tabs]);
 
-  useEffect(() => {
-    setValidationError(validateBeforeSave() || "");
-  }, [validateBeforeSave]);
-
-  // Save All
+  /* ---------------- SAVE ALL ---------------- */
   const handleSaveAll = async () => {
     if (!hasChanges || validationError) return;
-    try {
-      await saveMenuSchema();
-      setLastSavedMenus(JSON.parse(JSON.stringify(safeMenus)));
-    } catch (err) {
-      console.error("Save failed:", err);
-    }
+
+    await saveMenuSchema({
+      tabs: JSON.parse(JSON.stringify(tabs)),
+    });
+
+    setLastSavedTabs(JSON.parse(JSON.stringify(tabs)));
   };
 
-  // CRUD operations
-  const handleAddMenu = (parentId = null) => {
-    const newMenu = {
-      id: crypto.randomUUID(),
-      title: "",
-      hasForm: false,
-      formSchema: [],
-      tableName: "",
-      children: [],
-      parentId,
-    };
-    setEditingMenu(newMenu);
-    setOpenDialog(true);
-  };
+  /* ---------------- CRUD: UPsert Menu ---------------- */
+  const upsertMenu = (menu) => {
+    setMenus((prev) => {
+      const cloned = JSON.parse(JSON.stringify(prev.tabs || []));
 
-  const handleEditMenu = (menu) => {
-    setEditingMenu(menu);
-    setOpenDialog(true);
-  };
+      function apply(list) {
+        const idx = list.findIndex((x) => x.id === menu.id);
 
-  const handleDeleteMenu = (menuId) => {
-    const deleteRecursive = (list) =>
-      list
-        .filter((m) => m.id !== menuId)
-        .map((m) => ({ ...m, children: deleteRecursive(m.children || []) }));
+        if (idx !== -1) {
+          list[idx] = menu;
+          return list;
+        }
 
-    setMenus((prev) => deleteRecursive(safeMenus));
-  };
+        if (!menu.parentId) {
+          menu.order = list.length + 1;
+          list.push(menu);
+          return list;
+        }
 
-  const saveMenu = () => {
-    const saveRecursive = (list, menu) => {
-      if (menu.parentId === null) {
-        const exists = list.find((m) => m.id === menu.id);
-        return exists
-          ? list.map((m) => (m.id === menu.id ? menu : m))
-          : [...list, menu];
+        return list.map((item) => ({
+          ...item,
+          children:
+            item.id === menu.parentId
+              ? [
+                  ...(item.children || []),
+                  {
+                    ...menu,
+                    order: (item.children?.length || 0) + 1,
+                  },
+                ]
+              : apply(item.children || []),
+        }));
       }
 
-      return list.map((m) => {
-        if (m.id === menu.parentId) {
-          const childExists = m.children?.find((c) => c.id === menu.id);
-          return {
-            ...m,
-            children: childExists
-              ? m.children.map((c) => (c.id === menu.id ? menu : c))
-              : [...(m.children || []), menu],
-          };
-        }
-        return { ...m, children: saveRecursive(m.children || [], menu) };
-      });
-    };
+      return { ...prev, tabs: apply(cloned) };
+    });
+  };
 
-    setMenus((prev) => saveRecursive(safeMenus, editingMenu));
+  /* ---------------- DELETE MENU ---------------- */
+  const deleteMenu = (id) => {
+    setMenus((prev) => {
+      function remove(list) {
+        return list
+          .filter((x) => x.id !== id)
+          .map((m) => ({ ...m, children: remove(m.children || []) }));
+      }
+
+      return { ...prev, tabs: remove(prev.tabs || []) };
+    });
+  };
+
+  /* ---------------- SAVE MENU ---------------- */
+  const saveMenu = () => {
+    let menu = { ...editingMenu };
+
+    if (menu.hasForm) {
+      menu.tableName = `${slugify(menu.title)}_${Date.now()}`;
+    } else {
+      menu.tableName = "";
+    }
+
+    upsertMenu(menu);
+    setDialogOpen(false);
     setEditingMenu(null);
-    setOpenDialog(false);
   };
 
-  const handleSaveForm = (menuId, formSchema) => {
-    const updateRecursive = (list) =>
-      list.map((m) => {
-        if (m.id === menuId) {
-          return { ...m, formSchema };
-        } else if (m.children?.length > 0) {
-          return { ...m, children: updateRecursive(m.children) };
-        }
-        return m;
-      });
+  /* ---------------- SAVE FORM SCHEMA ---------------- */
+  const saveFormSchema = (menuId, schema) => {
+    setMenus((prev) => {
+      function update(list) {
+        return list.map((m) => {
+          if (m.id === menuId) {
+            const updated = { ...m, formSchema: schema };
+            if (updated.hasForm && !updated.tableName)
+              updated.tableName = `${slugify(updated.title)}_${Date.now()}`;
+            return updated;
+          }
+          return { ...m, children: update(m.children || []) };
+        });
+      }
 
-    setMenus((prev) => updateRecursive(safeMenus));
-    setShowFormBuilder(null);
+      return { ...prev, tabs: update(prev.tabs) };
+    });
+
+    setFormBuilder(null);
   };
 
-  const findMenuById = (list, id) => {
-    if (!Array.isArray(list)) return null;
+  /* ---------------- FIND MENU ---------------- */
+  const findMenu = (list, id) => {
     for (const m of list) {
       if (m.id === id) return m;
-      const found = findMenuById(m.children, id);
+      const found = findMenu(m.children || [], id);
       if (found) return found;
     }
     return null;
   };
 
-  // Render diff chip
-  const renderDiffChip = (kind, path) => {
-    const label = path?.join(" → ") || "";
-    switch (kind) {
-      case "N": return <Chip size="small" color="success" label={`+ ${label}`} />;
-      case "D": return <Chip size="small" color="error" label={`− ${label}`} />;
-      case "E": return <Chip size="small" color="warning" label={`Edit ${label}`} />;
-      case "A": return <Chip size="small" color="info" label="Array change" />;
-      default: return null;
-    }
-  };
+  /* ---------------- Render Tree UI ---------------- */
+  const renderTree = (list, lvl = 0) =>
+    list.map((m) => (
+      <div key={m.id} className="ml-4 mb-3">
+        <div className="flex justify-between items-center">
+          <span>
+            {"— ".repeat(lvl)} {m.title}
+          </span>
 
-  // Render menu tree
-  const renderMenuTree = (list, level = 0) => {
-    if (!Array.isArray(list)) return null;
+          <div className="flex gap-1">
+            {/* Add Submenu */}
+            <Button
+              size="small"
+              startIcon={<Add />}
+              onClick={() => {
+                setEditingMenu({
+                  id: crypto.randomUUID(),
+                  parentId: m.id,
+                  title: "",
+                  hasForm: false,
+                  formSchema: [],
+                  tableName: "",
+                  children: [],
+                });
+                setDialogOpen(true);
+              }}
+            >
+              Submenu
+            </Button>
 
-    return (
-      <ul className="ml-4 border-l pl-4">
-        {list.map((menu) => {
-          const menuDiffs = differences.filter(
-            (d) => d.path[0] === list.indexOf(menu) || d.path.includes(menu.id)
-          );
+            {m.hasForm && (
+              <Button
+                size="small"
+                startIcon={<List />}
+                onClick={() => setFormBuilder(m.id)}
+              >
+                Form
+              </Button>
+            )}
 
-          return (
-            <li key={menu.id} className="mb-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 flex-1">
-                  <span className="font-medium text-gray-800">
-                    {"— ".repeat(level)} {menu.title || "(Untitled Menu)"}
-                  </span>
-                  {menu.hasForm && (
-                    <Chip size="small" label="Form" color="primary" />
-                  )}
-                  {menuDiffs.length > 0 && (
-                    <Box className="flex gap-1">
-                      {menuDiffs.map((d, i) => (
-                        <span key={i}>{renderDiffChip(d.kind, d.path)}</span>
-                      ))}
-                    </Box>
-                  )}
-                </div>
+            <IconButton
+              onClick={() => {
+                setEditingMenu(m);
+                setDialogOpen(true);
+              }}
+            >
+              <Edit />
+            </IconButton>
 
-                <div className="flex gap-1">
-                  {menu.hasForm && (
-                    <Button
-                      size="small"
-                      onClick={() => setShowFormBuilder(menu.id)}
-                      startIcon={<List />}
-                    >
-                      Form
-                    </Button>
-                  )}
-                  <IconButton
-                    color="primary"
-                    size="small"
-                    onClick={() => handleAddMenu(menu.id)}
-                  >
-                    <Add />
-                  </IconButton>
-                  <IconButton
-                    color="secondary"
-                    size="small"
-                    onClick={() => handleEditMenu(menu)}
-                  >
-                    <Edit />
-                  </IconButton>
-                  <IconButton
-                    color="error"
-                    size="small"
-                    onClick={() => handleDeleteMenu(menu.id)}
-                  >
-                    <Delete />
-                  </IconButton>
-                </div>
-              </div>
+            <IconButton onClick={() => deleteMenu(m.id)}>
+              <Delete color="error" />
+            </IconButton>
+          </div>
+        </div>
 
-              {menu.children?.length > 0 && (
-                <div>{renderMenuTree(menu.children, level + 1)}</div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    );
-  };
+        {m.children?.length > 0 && renderTree(m.children, lvl + 1)}
+      </div>
+    ));
 
+  /* ---------------- UI ---------------- */
   return (
     <div className="p-6 max-w-5xl mx-auto bg-white rounded-xl shadow-lg">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between mb-4">
         <h2 className="text-2xl font-semibold">Menu Manager</h2>
 
-        <div className="flex items-center gap-3">
-          {hasChanges && (
-            <Chip
-              icon={<CompareArrows />}
-              label={`${differences.length} change${differences.length > 1 ? "s" : ""}`}
-              color="secondary"
-            />
-          )}
-
-          <Button
-            variant="contained"
-            color={hasChanges && !validationError ? "success" : "inherit"}
-            startIcon={hasChanges ? <Save /> : <CheckCircle />}
-            onClick={handleSaveAll}
-            disabled={!hasChanges || !!validationError}
-          >
-            {hasChanges ? "Save All" : "Saved"}
-          </Button>
-        </div>
+        <Button
+          variant="contained"
+          color={hasChanges && !validationError ? "success" : "inherit"}
+          startIcon={hasChanges ? <Save /> : <CheckCircle />}
+          disabled={!hasChanges || !!validationError}
+          onClick={handleSaveAll}
+        >
+          {hasChanges ? "Save All" : "Saved"}
+        </Button>
       </div>
 
-      {/* Validation Alert */}
-      {validationError && (
-        <Alert severity="error" className="mb-4">
-          {validationError}
-        </Alert>
-      )}
+      {validationError && <Alert severity="error">{validationError}</Alert>}
 
-      {/* Add Root */}
+      {/* Root menu add */}
       <Button
         variant="contained"
         startIcon={<Add />}
-        onClick={() => handleAddMenu(null)}
-        className="mb-4"
+        onClick={() => {
+          setEditingMenu({
+            id: crypto.randomUUID(),
+            parentId: null,
+            title: "",
+            hasForm: false,
+            formSchema: [],
+            tableName: "",
+            children: [],
+          });
+          setDialogOpen(true);
+        }}
       >
         Add Root Menu
       </Button>
 
-      {/* Tree */}
-      <div className="mt-6">
-        {safeMenus.length > 0 ? (
-          renderMenuTree(safeMenus)
-        ) : (
-          <p className="text-gray-500 italic mt-4">No menus created yet.</p>
-        )}
-      </div>
+      <div className="mt-5">{renderTree(tabs)}</div>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{editingMenu?.id ? "Edit Menu" : "Add Menu"}</DialogTitle>
+      {/* Add/Edit Menu Dialog */}
+      <Dialog fullWidth open={dialogOpen} onClose={() => setDialogOpen(false)}>
+        <DialogTitle>
+          {editingMenu?.parentId ? "Add Submenu" : "Add Menu"}
+        </DialogTitle>
+
         <DialogContent>
           <TextField
             label="Menu Title"
@@ -380,17 +307,7 @@ const MenuManagerPage = () => {
               setEditingMenu({ ...editingMenu, title: e.target.value })
             }
           />
-          <TextField
-            label="Table Name (for forms)"
-            fullWidth
-            margin="dense"
-            value={editingMenu?.tableName || ""}
-            onChange={(e) =>
-              setEditingMenu({ ...editingMenu, tableName: e.target.value })
-            }
-            helperText="Required if form is attached. Only letters, numbers, _, -"
-            disabled={!editingMenu?.hasForm}
-          />
+
           <FormControlLabel
             control={
               <Switch
@@ -399,7 +316,6 @@ const MenuManagerPage = () => {
                   setEditingMenu({
                     ...editingMenu,
                     hasForm: e.target.checked,
-                    tableName: e.target.checked ? editingMenu?.tableName || "" : "",
                   })
                 }
               />
@@ -407,42 +323,35 @@ const MenuManagerPage = () => {
             label="Attach Dynamic Form?"
           />
         </DialogContent>
+
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={saveMenu} variant="contained" color="primary">
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={saveMenu}>
             Save
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Form Builder */}
-      {showFormBuilder && (
+      {formBuilder && (
         <Dialog
-          open={!!showFormBuilder}
-          onClose={() => setShowFormBuilder(null)}
+          open={!!formBuilder}
           fullScreen={fullScreen}
-          maxWidth="md"
           fullWidth
-          PaperProps={{
-            sx: { borderRadius: 2, minHeight: fullScreen ? "100%" : "80vh" },
-          }}
+          onClose={() => setFormBuilder(null)}
         >
           <DialogTitle>Form Builder</DialogTitle>
           <DialogContent>
             <FormBuilderPage
-              existingForm={
-                findMenuById(safeMenus, showFormBuilder)?.formSchema || []
-              }
-              onSave={(schema) => handleSaveForm(showFormBuilder, schema)}
+              existingForm={findMenu(tabs, formBuilder)?.formSchema || []}
+              onSave={(schema) => saveFormSchema(formBuilder, schema)}
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setShowFormBuilder(null)}>Close</Button>
+            <Button onClick={() => setFormBuilder(null)}>Close</Button>
           </DialogActions>
         </Dialog>
       )}
     </div>
   );
-};
-
-export default MenuManagerPage;
+}

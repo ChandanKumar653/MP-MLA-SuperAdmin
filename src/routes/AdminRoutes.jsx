@@ -10,71 +10,80 @@ import NotFoundPage from "../pages/NotFoundPage";
 const AdminRoutes = () => {
   const { menus } = useContext(MenuContext);
 
-  // Safely ensure menus is always an array (even if string or null)
+  // NEW → menus.tabs is always guaranteed array
   const menuList = useMemo(() => {
-    if (Array.isArray(menus)) return menus;
-    if (typeof menus === "string") {
-      try {
-        return JSON.parse(menus);
-      } catch (e) {
-        console.error("Failed to parse menus:", e);
-        return [];
-      }
-    }
-    return [];
+    return Array.isArray(menus?.tabs) ? menus.tabs : [];
   }, [menus]);
-  console.log("AdminRoutes - menuList:", menuList);
 
-  // Recursively generate routes from menu tree
-  const generateDynamicRoutes = (items) => {
-    if (!items || items.length === 0) return null;
+  console.log("ROUTES → tabs:", menuList);
 
-    return items?.map((menu) => {
-      const hasChildren = menu.children && menu.children.length > 0;
+  /* --------------------------------------------------------
+     RECURSIVE FUNCTION TO GENERATE ROUTES
+  ---------------------------------------------------------*/
+  const generateDynamicRoutes = (items, basePath = "") => {
+    if (!items || !items.length) return null;
+
+    return items.map((menu) => {
+      const path = `${basePath}/${menu.id}`.replace("//", "/");
+      const children = menu.children || [];
+
+      const hasChildren = children.length > 0;
 
       if (hasChildren) {
-        // Parent menu → create a route that can have nested children
         return (
           <Route key={menu.id} path={menu.id}>
-            {/* Optional: show something on parent path */}
-            <Route index element={<Navigate to={menu.children[0].id} replace />} />
-            {generateDynamicRoutes(menu.children)}
+            {/* redirect parent → first child */}
+            <Route
+              index
+              element={<Navigate to={children[0].id} replace />}
+            />
+
+            {/* generate nested children */}
+            {generateDynamicRoutes(children)}
           </Route>
         );
-      } else {
-        // Leaf menu → render FormViewer
-        return (
-          <Route
-            key={menu.id}
-            path={menu.id}
-            element={<FormViewerPage formData={menu.formSchema || []} tableName={menu.tableName} />}
-          />
-        );
       }
+
+      // LEAF MENU → load FormViewer
+      return (
+        <Route
+          key={menu.id}
+          path={menu.id}
+          element={
+            <FormViewerPage
+              formData={menu.formSchema || []}
+              tableName={menu.tableName}
+            />
+          }
+        />
+      );
     });
   };
 
-  // Memoize the generated routes to avoid re-creating on every render
-  const dynamicRoutes = useMemo(() => {
-    return generateDynamicRoutes(menuList);
-  }, [menuList]);
+  const dynamicRoutes = useMemo(
+    () => generateDynamicRoutes(menuList),
+    [menuList]
+  );
 
   return (
     <Routes>
+      {/* MAIN ADMIN LAYOUT */}
       <Route path="/" element={<Layout role="admin" />}>
-        {/* Static routes */}
+        {/* DEFAULT REDIRECT */}
         <Route index element={<Navigate to="dashboard" replace />} />
+
+        {/* STATIC ROUTES */}
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="menus" element={<MenuManagerPage />} />
 
-        {/* Dynamic routes from menu schema */}
+        {/* DYNAMIC ROUTES BASED ON MENU SCHEMA */}
         {dynamicRoutes}
 
-        {/* Catch-all: redirect unknown paths */}
-        {/* <Route path="*" element={<Navigate to="dashboard" replace />} /> */}
+        {/* Unknown paths inside admin layout */}
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
 
-      {/* Optional: Global 404 outside layout */}
+      {/* GLOBAL 404 */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

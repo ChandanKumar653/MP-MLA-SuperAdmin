@@ -2,6 +2,8 @@ import StatCard from "../components/StatCard";
 import RevenueChart from "../components/RevenueChart";
 import TopOrgs from "../components/TopOrgs";
 import { MdGroups, MdAdminPanelSettings, MdPeople } from "react-icons/md";
+import {MenuContext} from "../context/MenuContext"; 
+
 
 const Dashboard = () => (
   <div className="flex-1 p-6 bg-gradient-to-br from-purple-50 to-white min-h-screen">

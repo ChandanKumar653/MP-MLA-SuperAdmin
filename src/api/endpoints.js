@@ -25,6 +25,7 @@ export const apiEndpoints = {
    menus: {
     getAll: (tenantId) => api.get(`/admin/tenant-schema/${tenantId}`),
     save: (data) => api.post("/admin/tenant-schema", data),
+    deploySchema: (data) => api.post(`/admin/tenant-schema/deploy/${data?.tenantId}`, data),
   },
   submitForm:{
     submit: (data) => api.post("/admin/data/store", data),

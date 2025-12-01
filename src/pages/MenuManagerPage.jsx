@@ -1,4 +1,3 @@
-
 import React, {
   useContext,
   useState,
@@ -20,12 +19,15 @@ import {
   Alert,
   useMediaQuery,
   useTheme,
+  CircularProgress,
 } from "@mui/material";
-import { Add, Delete, Edit, List, Save, CheckCircle } from "@mui/icons-material";
+import { Add, Delete, Edit, List, Save, CheckCircle, CloudUpload } from "@mui/icons-material";
 
+import Swal from "sweetalert2";
 import { MenuContext } from "../context/MenuContext";
 import FormBuilderPage from "./FormBuilderPage";
-
+import useApi from "../context/useApi";
+import { apiEndpoints } from "../api/endpoints";
 /* ---------------- Utilities ---------------- */
 const slugify = (str) =>
   (str || "")
@@ -37,7 +39,7 @@ const slugify = (str) =>
 /* ---------------- MAIN ---------------- */
 export default function MenuManagerPage() {
   const { menus, setMenus, saveMenuSchema } = useContext(MenuContext);
-
+   const tenantId = menus?.tenantId;  
   const tabs = menus?.tabs || [];
 
   const [editingMenu, setEditingMenu] = useState(null);
@@ -47,6 +49,12 @@ export default function MenuManagerPage() {
   const initialized = useRef(false);
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down("md"));
+
+  const [deployLoading, setDeployLoading] = useState(false);
+  const { execute: deploySchemaApi } = useApi(apiEndpoints.menus.deploySchema, {
+  immediate: false,
+});
+
 
   /* ---------------- Track Saved Tabs ---------------- */
   const [lastSavedTabs, setLastSavedTabs] = useState([]);
@@ -93,6 +101,61 @@ export default function MenuManagerPage() {
 
     setLastSavedTabs(JSON.parse(JSON.stringify(tabs)));
   };
+
+  /* ---------------- DEPLOY SCHEMA ---------------- */
+  const handleDeploySchema = async () => {
+  if (hasChanges) {
+    return Swal.fire({
+      icon: "warning",
+      title: "Unsaved Changes",
+      text: "Please save changes before deploying.",
+    });
+  }
+
+  if (validationError) {
+    return Swal.fire({
+      icon: "error",
+      title: "Validation Error",
+      text: validationError,
+    });
+  }
+
+  const confirm = await Swal.fire({
+    title: "Deploy Schema?",
+    text: "This will generate backend tables using the schema.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Yes, Deploy",
+    cancelButtonText: "Cancel",
+  });
+
+  if (!confirm.isConfirmed) return;
+
+  setDeployLoading(true);
+
+  try {
+    const response = await deploySchemaApi({
+      tenantId,
+      data: tabs,
+    });
+console.log("Deploy API Response:", response);
+    
+      Swal.fire({
+        icon: "success",
+        title: "Deployment Successful",
+        text: "Tenant schema deployed successfully. It may take a few moments for backend tables to be created.",
+      });
+    
+  } catch (err) {
+    Swal.fire({
+      icon: "error",
+      title: "API Error",
+      text: err.message || "Something went wrong",
+    });
+  } finally {
+    setDeployLoading(false);
+  }
+};
 
   /* ---------------- CRUD: UPsert Menu ---------------- */
   const upsertMenu = (menu) => {
@@ -256,15 +319,31 @@ export default function MenuManagerPage() {
       <div className="flex justify-between mb-4">
         <h2 className="text-2xl font-semibold">Menu Manager</h2>
 
-        <Button
-          variant="contained"
-          color={hasChanges && !validationError ? "success" : "inherit"}
-          startIcon={hasChanges ? <Save /> : <CheckCircle />}
-          disabled={!hasChanges || !!validationError}
-          onClick={handleSaveAll}
-        >
-          {hasChanges ? "Save All" : "Saved"}
-        </Button>
+        <div className="flex gap-3">
+          {/* SAVE ALL BUTTON */}
+          <Button
+            variant="contained"
+            color={hasChanges && !validationError ? "success" : "inherit"}
+            startIcon={hasChanges ? <Save /> : <CheckCircle />}
+            disabled={!hasChanges || !!validationError}
+            onClick={handleSaveAll}
+          >
+            {hasChanges ? "Save All" : "Saved"}
+          </Button>
+
+          {/* DEPLOY BUTTON */}
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={
+              deployLoading ? <CircularProgress size={20} /> : <CloudUpload />
+            }
+            disabled={hasChanges || !!validationError || deployLoading}
+            onClick={handleDeploySchema}
+          >
+            {deployLoading ? "Deploying..." : "Deploy Schema"}
+          </Button>
+        </div>
       </div>
 
       {validationError && <Alert severity="error">{validationError}</Alert>}

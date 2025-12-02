@@ -4,8 +4,13 @@ import TopOrgs from "../components/TopOrgs";
 import { MdGroups, MdAdminPanelSettings, MdPeople } from "react-icons/md";
 import {MenuContext} from "../context/MenuContext"; 
 
+import { useContext } from "react";
+const Dashboard = () =>{
+  
+const {menus} = useContext(MenuContext);
+// console.log("Dashboard menus from context:", menus);
 
-const Dashboard = () => (
+  return(
   <div className="flex-1 p-6 bg-gradient-to-br from-purple-50 to-white min-h-screen">
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
       <StatCard
@@ -32,5 +37,7 @@ const Dashboard = () => (
     <TopOrgs />
   </div>
 );
+
+};
 
 export default Dashboard;

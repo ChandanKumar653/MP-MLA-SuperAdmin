@@ -1,5 +1,5 @@
 // src/components/DynamicTable.jsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Box,
   Table,
@@ -17,18 +17,26 @@ import {
   Button,
   Tooltip,
 } from "@mui/material";
-import { ViewColumn, FilterList } from "@mui/icons-material";
+import { ViewColumn } from "@mui/icons-material";
 
 const DynamicTable = ({ columns = [], rows = [], loading = false }) => {
+  // console.log("DynamicTable Columns:", columns);
+  // console.log("DynamicTable Rows:", rows);
+
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const [anchorEl, setAnchorEl] = useState(null);
 
   // Column visibility state
-  const [visibleCols, setVisibleCols] = useState(
-    columns.reduce((acc, col) => ({ ...acc, [col.key]: true }), {})
-  );
+  const [visibleCols, setVisibleCols] = useState({});
+
+  // 🔥 FIX: Update visibility whenever columns change
+  useEffect(() => {
+    setVisibleCols(
+      columns.reduce((acc, col) => ({ ...acc, [col.key]: true }), {})
+    );
+  }, [columns]);
 
   // Sorting
   const [orderBy, setOrderBy] = useState(null);
@@ -46,6 +54,7 @@ const DynamicTable = ({ columns = [], rows = [], loading = false }) => {
     return [...rows].sort((a, b) => {
       const av = a[orderBy];
       const bv = b[orderBy];
+
       if (av < bv) return order === "asc" ? -1 : 1;
       if (av > bv) return order === "asc" ? 1 : -1;
       return 0;
@@ -58,9 +67,8 @@ const DynamicTable = ({ columns = [], rows = [], loading = false }) => {
   );
 
   // Toggle column visibility
-  const toggleColumn = (key) => {
+  const toggleColumn = (key) =>
     setVisibleCols((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
 
   return (
     <Paper elevation={3} sx={{ p: 2, width: "100%", overflowX: "auto" }}>
@@ -85,7 +93,7 @@ const DynamicTable = ({ columns = [], rows = [], loading = false }) => {
           {columns.map((col) => (
             <Box key={col.key} display="flex" alignItems="center">
               <Checkbox
-                checked={visibleCols[col.key]}
+                checked={visibleCols[col.key] || false}
                 onChange={() => toggleColumn(col.key)}
               />
               {col.label}
@@ -126,11 +134,13 @@ const DynamicTable = ({ columns = [], rows = [], loading = false }) => {
               </TableRow>
             ) : (
               paginatedRows.map((row, idx) => (
-                <TableRow key={idx}>
+                <TableRow key={idx} hover>
                   {columns
                     .filter((c) => visibleCols[c.key])
                     .map((col) => (
-                      <TableCell key={col.key}>{row[col.key]}</TableCell>
+                      <TableCell key={col.key}>
+                        {String(row[col.key] ?? "")}
+                      </TableCell>
                     ))}
                 </TableRow>
               ))

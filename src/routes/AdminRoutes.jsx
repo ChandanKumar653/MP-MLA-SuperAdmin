@@ -157,9 +157,12 @@ const AdminRoutes = () => {
         {/* Static */}
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="menus" element={<MenuManagerPage />} />
+        <Route path="form-viewer/:menuId" element={<FormViewerPage />} />
+
 
         {/* Dynamic from menus */}
         {dynamicRoutes}
+
 
         <Route path="*" element={<NotFoundPage />} />
       </Route>

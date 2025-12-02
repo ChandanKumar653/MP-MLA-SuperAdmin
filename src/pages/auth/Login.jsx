@@ -54,7 +54,7 @@ const Login = () => {
 
     try {
       const response = await execute({ email, password });
-      console.log(response);
+      // console.log(response);
 
       localStorage.setItem("token", response?.token);
       login({
@@ -63,7 +63,8 @@ const Login = () => {
         token:response?.token
       });
 
-      navigate(`/${response?.role}/dashboard`);
+      // navigate(`/${response?.role}/dashboard`);
+      window.location.href = `/${response?.role}/dashboard`;
     } catch (err) {
       console.error("Login error:", err);
       if (err.response) {

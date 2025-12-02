@@ -138,7 +138,7 @@ export default function MenuManagerPage() {
       tenantId,
       data: tabs,
     });
-console.log("Deploy API Response:", response);
+// console.log("Deploy API Response:", response);
     
       Swal.fire({
         icon: "success",

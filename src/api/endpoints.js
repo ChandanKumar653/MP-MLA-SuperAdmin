@@ -29,6 +29,6 @@ export const apiEndpoints = {
   },
   submitForm:{
     submit: (data) => api.post("/admin/data/store", data),
-    allData: (data) => api.post("admin/get",data ),
+    allData: (data) => api.post("/admin/all",data ),
   }
 };

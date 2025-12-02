@@ -45,7 +45,7 @@ export const MenuProvider = ({ children }) => {
   /* ---------------------------------------
      API HOOKS
   ---------------------------------------- */
-  const { execute: fetchMenus } = useApi(apiEndpoints.menus.getAll, { immediate: false });
+  const { execute: fetchMenus } = useApi(apiEndpoints.menus.getAll, { immediate: true });
   const { execute: saveMenus } = useApi(apiEndpoints.menus.save, { immediate: false });
 
   /* ---------------------------------------

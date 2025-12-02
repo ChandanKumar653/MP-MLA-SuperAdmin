@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useContext } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as Yup from "yup";
@@ -19,11 +19,13 @@ import {
 } from "@mui/material";
 
 import { AuthContext } from "../context/AuthContext";
+import { MenuContext } from "../context/MenuContext";
+
 import useApi from "../context/useApi";
 import { apiEndpoints } from "../api/endpoints";
 
 /* -------------------------------------------------------
-   NORMALIZER — convert API schema → form fields
+   NORMALIZER — convert schema → form fields
 -------------------------------------------------------- */
 const normalizeField = (f) => ({
   id: f.id || f.name,
@@ -49,35 +51,50 @@ const normalizeField = (f) => ({
 /* -------------------------------------------------------
    MAIN COMPONENT
 -------------------------------------------------------- */
-const FormViewerPage = ({ formData = [] }) => {
+const FormViewerPage = () => {
+  const { menuId } = useParams();     // ⭐ Path param
+  const navigate = useNavigate();
+
   const [fields, setFields] = useState([]);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  /* --------- Needed for API body ---------- */
+  /* Auth / tenantId */
   const { getDecodedToken } = useContext(AuthContext);
   const decoded = getDecodedToken?.();
   const tenantId = decoded?.tenantId;
 
-  /* route param to get menu/submenu title (matching id from menu tree) */
-  const { "*": path } = useParams(); // captures nested route
-  const currentTitle = path?.split("/")?.slice(-1)[0]; // last segment = menuId or submenuId
+  /* MENU CONTEXT */
+  const { menus } = useContext(MenuContext);
+
+  /* Extract correct menu from menu tree */
+  const findMenu = (list) => {
+    for (let m of list) {
+      if (m.id === menuId) return m;
+      const found = findMenu(m.children || []);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const menuObj = findMenu(menus?.tabs || []);
+
+  const tableName = menuObj?.tableName || null;
+  const schema = menuObj?.formSchema || [];
 
   /* Submit API executor */
   const { execute: submitFormApi } = useApi(apiEndpoints.submitForm.submit, {
     immediate: false,
   });
 
-  /* -------------------------------------------------------
-     NORMALIZE SCHEMA
-  -------------------------------------------------------- */
+  /* Load and normalize schema */
   useEffect(() => {
-    if (Array.isArray(formData)) {
-      setFields(formData.map(normalizeField));
+    if (Array.isArray(schema)) {
+      setFields(schema.map(normalizeField));
     }
-  }, [formData]);
+  }, [schema,menus]);
 
   /* -------------------------------------------------------
-     BUILD YUP VALIDATION
+     YUP VALIDATION BUILDER
   -------------------------------------------------------- */
   const buildValidationSchema = () => {
     const shape = {};
@@ -90,8 +107,7 @@ const FormViewerPage = ({ formData = [] }) => {
       else if (field.type === "number") schema = Yup.number().typeError("Must be a valid number");
       else if (field.type === "date") schema = Yup.string();
       else if (field.type === "select") schema = Yup.string();
-      else if (field.type === "checkbox-group")
-        schema = Yup.array().of(Yup.string());
+      else if (field.type === "checkbox-group") schema = Yup.array().of(Yup.string());
       else if (field.type === "file")
         schema = Yup.mixed().test("req", "File required", (v) => v && v.length > 0);
       else schema = Yup.string();
@@ -108,9 +124,7 @@ const FormViewerPage = ({ formData = [] }) => {
       if (field.regex) {
         try {
           const regex = new RegExp(field.regex);
-          schema = schema.test("regex", "Invalid format", (v) =>
-            regex.test(v || "")
-          );
+          schema = schema.test("regex", "Invalid format", (v) => regex.test(v || ""));
         } catch {}
       }
 
@@ -130,7 +144,7 @@ const FormViewerPage = ({ formData = [] }) => {
     reset,
   } = useForm({
     resolver: yupResolver(buildValidationSchema()),
-    defaultValues: fields.reduce((a, f) => ({ ...a, [f.name]: "" }), {}),
+    defaultValues: fields.reduce((acc, f) => ({ ...acc, [f.name]: "" }), {}),
   });
 
   /* -------------------------------------------------------
@@ -146,16 +160,16 @@ const FormViewerPage = ({ formData = [] }) => {
 
     const payload = {
       tenantId,
-      title: currentTitle, // menu or submenu id
+      title:menuObj.title,
+      tableName,    // ⭐ REQUIRED (dynamic table name)
       data: formatted,
     };
 
     try {
-      const res = await submitFormApi(payload);
+      await submitFormApi(payload);
       setSubmitSuccess(true);
       reset();
-
-      setTimeout(() => setSubmitSuccess(false), 3000);
+      setTimeout(() => setSubmitSuccess(false), 2500);
     } catch (err) {
       console.error("Submit failed:", err);
     }
@@ -164,9 +178,16 @@ const FormViewerPage = ({ formData = [] }) => {
   /* -------------------------------------------------------
      UI
   -------------------------------------------------------- */
+  if (!menuObj) {
+    return <p className="p-6 text-red-600">Invalid Menu ID: {menuId}</p>;
+  }
+
   return (
     <div className="p-6 max-w-3xl mx-auto bg-white rounded-xl shadow-lg">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">🧾 Form</h2>
+
+      <h2 className="text-2xl font-bold mb-6 text-gray-800">
+        🧾 {menuObj.title}
+      </h2>
 
       {submitSuccess && (
         <Alert severity="success" className="mb-4">
@@ -259,6 +280,15 @@ const FormViewerPage = ({ formData = [] }) => {
           </Button>
         </form>
       )}
+
+      <Button
+        variant="outlined"
+        onClick={() => navigate(-1)}
+        className="mt-4"
+        fullWidth
+      >
+        Back
+      </Button>
     </div>
   );
 };

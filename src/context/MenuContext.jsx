@@ -13,94 +13,110 @@ import { AuthContext } from "./AuthContext";
 export const MenuContext = createContext();
 
 export const MenuProvider = ({ children }) => {
-  const [menus, setMenusState] = useState([]);
-  const [tenantId, setTenantId] = useState(null);
-  const [token, setToken] = useState(null);
-  const [createdBy, setCreatedBy] = useState(null);
+  const [menus, setMenusState] = useState({
+    tenantId: null,
+    createdBy: null,
+    tabs: []
+  });
 
   const { getDecodedToken } = useContext(AuthContext);
 
-  // 🟢 Decode token once
+  /* ---------------------------------------
+     TOKEN DECODE + EXPIRY VALIDATION
+  ---------------------------------------- */
   useEffect(() => {
-    try {
-      const decoded = getDecodedToken?.();
-      if (decoded) {
-        setTenantId(decoded?.tenantId || null);
-        setToken(decoded?.token || null);
-        setCreatedBy(decoded?.userId || decoded?.tenantId || null);
-      }
-    } catch (err) {
-      console.error("Invalid token:", err);
+    const decoded = getDecodedToken?.();
+    if (!decoded) return;
+
+    // check expiration
+    if (decoded.exp * 1000 < Date.now()) {
+      localStorage.clear();
+      window.location.href = "/login";
+      return;
     }
-  }, [getDecodedToken]);
 
-  // --- API hooks ---
-  const { execute: fetchMenus } = useApi(apiEndpoints.menus.getAll, {
-    immediate: false,
-  });
-  const { execute: saveMenus } = useApi(apiEndpoints.menus.save, {
-    immediate: false,
-  });
+    setMenusState((prev) => ({
+      ...prev,
+      tenantId: decoded.tenantId,
+      createdBy: decoded.userId || decoded.tenantId
+    }));
+  }, []);
 
-  // --- Fetch menus only when tenantId ready ---
+  /* ---------------------------------------
+     API HOOKS
+  ---------------------------------------- */
+  const { execute: fetchMenus } = useApi(apiEndpoints.menus.getAll, { immediate: true });
+  const { execute: saveMenus } = useApi(apiEndpoints.menus.save, { immediate: false });
+
+  /* ---------------------------------------
+     LOAD MENUS FROM BACKEND
+  ---------------------------------------- */
   useEffect(() => {
-    if (!tenantId) return;
-    const loadMenus = async () => {
+    if (!menus.tenantId) return;
+
+    const load = async () => {
       try {
-        const res = await fetchMenus({
-          tenantId,
-          schemaVersion: 1,
-          createdBy: createdBy || "",
-          schema: [],
-        });
-        setMenusState(res?.data?.schema || []);
+        const res = await fetchMenus(menus.tenantId);
+        const raw = res?.data?.data; // string
+
+        let tabs = [];
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            tabs = parsed?.[0]?.tabs || [];
+          } catch (err) {
+            console.error("Menu parse failed:", err);
+            tabs = [];
+          }
+        }
+
+        setMenusState((prev) => ({ ...prev, tabs }));
       } catch (err) {
         console.error("Failed to load menus:", err);
-        toast.error("Failed to load menu data.");
+        setMenusState((prev) => ({ ...prev, tabs: [] }));
+        toast.error("Failed to load menus");
       }
     };
-    loadMenus();
-  }, [tenantId, createdBy]); // ✅ removed fetchMenus from deps to avoid loops
 
-  // --- Just updates local menus, doesn’t auto-save ---
+    load();
+  }, [menus.tenantId]);
+
+  /* ---------------------------------------
+     setMenus — handles deep updates
+  ---------------------------------------- */
   const setMenus = useCallback((value) => {
-    const newMenus = typeof value === "function" ? value(menus) : value;
-    const normalizeMenus = (list, isRoot = true) =>
-      list.map((m) => ({
-        ...m,
-        type: isRoot ? "rootMenu" : "menu",
-        children: m.children ? normalizeMenus(m.children, false) : [],
-      }));
-    setMenusState(normalizeMenus(newMenus));
-  }, [menus]);
+    setMenusState((prev) => {
+      const updated =
+        typeof value === "function" ? value(prev) : value;
 
-  // --- Save menus to API manually ---
-  const saveMenuSchema = useCallback(async () => {
+      return {
+        ...prev,
+        tabs: updated.tabs
+      };
+    });
+  }, []);
+
+  /* ---------------------------------------
+     SAVE MENU SCHEMA — FIXED TO SEND ARRAY
+  ---------------------------------------- */
+  const saveMenuSchema = async ({ tabs }) => {
     try {
       await saveMenus({
-        tenantId,
-        schema: menus,
-        createdBy,
+        tenantId: menus.tenantId,
+        createdBy: menus.createdBy,
         schemaVersion: 1,
+        data: [{ tabs }]  // 👈 REAL ARRAY, NOT STRING
       });
+
       toast.success("Menu updated successfully");
     } catch (err) {
-      console.error("Failed to save menus:", err);
-      toast.error("Failed to update menus.");
+      console.error("Save menus failed:", err);
+      toast.error("Failed to update menus");
     }
-  }, [menus, tenantId, createdBy, saveMenus]);
+  };
 
   return (
-    <MenuContext.Provider
-      value={{
-        menus,
-        setMenus,
-        saveMenuSchema, // ✅ now exposed for manual trigger
-        tenantId,
-        token,
-        createdBy,
-      }}
-    >
+    <MenuContext.Provider value={{ menus, setMenus, saveMenuSchema }}>
       {children}
     </MenuContext.Provider>
   );

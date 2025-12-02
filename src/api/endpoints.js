@@ -23,7 +23,12 @@ export const apiEndpoints = {
     register: (data) => api.post("/auth/register", data),
   },
    menus: {
-    getAll: (data) => api.post("/admin/tenant-schema-all-data",data),
+    getAll: (tenantId) => api.get(`/admin/tenant-schema/${tenantId}`),
     save: (data) => api.post("/admin/tenant-schema", data),
+    deploySchema: (data) => api.post(`/admin/tenant-schema/deploy/${data?.tenantId}`, data),
   },
+  submitForm:{
+    submit: (data) => api.post("/admin/data/store", data),
+    allData: (data) => api.post("/admin/all",data ),
+  }
 };

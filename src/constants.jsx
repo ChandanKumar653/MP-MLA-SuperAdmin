@@ -1,1 +1,1 @@
-export const apiUrl = "http://3.109.202.117/";
+export const apiUrl = "http://13.126.203.2/";

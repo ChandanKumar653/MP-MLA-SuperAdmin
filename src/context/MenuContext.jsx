@@ -9,10 +9,11 @@ import { apiEndpoints } from "../api/endpoints";
 import useApi from "../context/useApi";
 import toast from "react-hot-toast";
 import { AuthContext } from "./AuthContext";
-
+import { useNavigate } from "react-router-dom";
 export const MenuContext = createContext();
 
 export const MenuProvider = ({ children }) => {
+  const navigate=useNavigate();
   const [menus, setMenusState] = useState({
     tenantId: null,
     createdBy: null,
@@ -31,6 +32,7 @@ export const MenuProvider = ({ children }) => {
     // check expiration
     if (decoded.exp * 1000 < Date.now()) {
       localStorage.clear();
+      // navigate
       window.location.href = "/login";
       return;
     }

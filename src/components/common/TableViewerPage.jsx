@@ -1,3 +1,4 @@
+// src/components/common/TableViewerPage.jsx
 import React, { useEffect, useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -15,18 +16,11 @@ import { MenuContext } from "../../context/MenuContext";
 import DynamicTable from "./DynamicTable";
 
 const TableViewerPage = ({ menu }) => {
-  // console.log("Menu prop in TableViewerPage:", menu);
   const { menus } = useContext(MenuContext);
-  // console.log("📌 TableViewerPage → menus from context:", menus);
 
-  /* Tenant ID is always inside MenuContext */
   const tenantId = menus?.tenantId;
 
-  /* Full menu object comes from route */
-  const { id, title, tableName, hasForm } = menu || {};
-
-  // console.log("📌 TableViewerPage → menu:", menu);
-  // console.log("📌 tenantId:", tenantId);
+  const { id, title, hasForm } = menu || {};
 
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState([]);
@@ -34,37 +28,22 @@ const TableViewerPage = ({ menu }) => {
 
   const navigate = useNavigate();
 
-  /* API hook — no default body */
   const { execute: fetchData } = useApi(apiEndpoints.submitForm.allData, {
     immediate: false,
   });
 
   useEffect(() => {
-    if (!tenantId || !menu) {
-      console.log("⏳ Waiting for tenantId or menu...");
-      return;
-    }
+    if (!tenantId || !menu) return;
 
     const load = async () => {
       try {
         setLoading(true);
 
-        // console.log("Calling API with:", {
-        //   tenantId,
-        //   title,
-        // });
-
-        const response = await fetchData({
-          tenantId,
-          title,
-        });
-
-        // console.log("API Response:", response);
+        const response = await fetchData({ tenantId, title });
 
         const dataArray = response?.data || [];
-        // console.log("Data Array:", dataArray);
 
-        // Dynamically generate columns
+        // generate dynamic columns
         if (dataArray.length > 0) {
           const keys = Object.keys(dataArray[0]);
           const generatedCols = keys.map((key) => ({
@@ -73,7 +52,7 @@ const TableViewerPage = ({ menu }) => {
           }));
           setColumns(generatedCols);
         } else {
-          setColumns([]); // no data yet
+          setColumns([]);
         }
 
         setRows(dataArray);
@@ -85,46 +64,27 @@ const TableViewerPage = ({ menu }) => {
     };
 
     load();
-  }, [tenantId, menu, fetchData, title]);
 
-  /* ----------------- Navigation for "Add" -----------------
-     Routes to FormViewerPage and passes tenantId, menuId, tableName
-     via query string so FormViewerPage can open blank form for this menu.
-  -------------------------------------------------------- */
+    // ⚡ DO NOT add fetchData — causes infinite loop
+  }, [tenantId, menu, title]);
+
   const handleAddNewRecord = () => {
-  if (!tenantId || !id) {
-    console.warn("Missing tenantId or menu id");
-    return;
-  }
-
-  navigate(`/admin/form-viewer/${id}`);
-};
-
+    if (!tenantId || !id) return;
+    navigate(`/admin/form-viewer/${id}`);
+  };
 
   return (
     <>
-      <Box
-        display="flex"
-        alignItems="center"
-        justifyContent="space-between"
-        mb={2}
-      >
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
         <Typography variant="h6">{title || "Table"}</Typography>
 
         <Box display="flex" alignItems="center" gap={1}>
           {loading && <CircularProgress size={20} />}
 
-          {/* Add button: only enabled if menu has dynamic form attached */}
           <Tooltip
-            title={
-              hasForm
-                ? "Add new record"
-                : "This menu does not have a form attached"
-            }
-            arrow
+            title={hasForm ? "Add new record" : "This menu does not have a form"}
           >
             <span>
-              {/* span wrapper so Tooltip works when button is disabled */}
               <Button
                 variant="contained"
                 color="primary"
@@ -142,8 +102,7 @@ const TableViewerPage = ({ menu }) => {
       <DynamicTable
         columns={columns}
         rows={rows}
-        loading={loading}
-        title={title}
+        isLoading={loading}
       />
     </>
   );

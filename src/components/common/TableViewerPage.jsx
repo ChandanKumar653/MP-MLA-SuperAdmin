@@ -7,103 +7,139 @@ import {
   Box,
   Typography,
   CircularProgress,
+  IconButton,
 } from "@mui/material";
-import { Add as AddIcon } from "@mui/icons-material";
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from "@mui/icons-material";
 
 import useApi from "../../context/useApi";
 import { apiEndpoints } from "../../api/endpoints";
 import { MenuContext } from "../../context/MenuContext";
 import DynamicTable from "./DynamicTable";
+import EditFormDialog from "./EditFormDialog";
 
 const TableViewerPage = ({ menu }) => {
   const { menus } = useContext(MenuContext);
-
   const tenantId = menus?.tenantId;
 
-  const { id, title, hasForm } = menu || {};
+  const { id, title, hasForm, formSchema } = menu || {};
 
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const [editOpen, setEditOpen] = useState(false);
+  const [currentRow, setCurrentRow] = useState(null);
+
   const navigate = useNavigate();
+  const { execute: fetchData } = useApi(apiEndpoints.submitForm.allData, { immediate: false });
 
-  const { execute: fetchData } = useApi(apiEndpoints.submitForm.allData, {
-    immediate: false,
-  });
-
+  // Load table data
   useEffect(() => {
     if (!tenantId || !menu) return;
 
     const load = async () => {
       try {
         setLoading(true);
-
         const response = await fetchData({ tenantId, title });
-
         const dataArray = response?.data || [];
 
-        // generate dynamic columns
-        if (dataArray.length > 0) {
-          const keys = Object.keys(dataArray[0]);
-          const generatedCols = keys.map((key) => ({
-            key,
-            label: key.replace(/_/g, " ").toUpperCase(),
-          }));
-          setColumns(generatedCols);
-        } else {
-          setColumns([]);
-        }
+        // Ensure each row has a unique pk
+        const tableRows = dataArray.map((row, index) => ({
+          ...row,
+          pk: row.id ?? row.pk ?? index, // fallback if no id
+          createdAt: row.createdAt ? new Date(row.createdAt).toLocaleString() : new Date().toLocaleString(),
+        }));
 
-        setRows(dataArray);
-      } catch (error) {
-        console.error("Error loading table data:", error);
+        setRows(tableRows);
+
+        const generatedCols =
+          formSchema?.map((f) => ({ key: f.name, label: f.label })) || [];
+
+        generatedCols.push({ key: "createdAt", label: "Created At" });
+
+        generatedCols.push({
+          key: "action",
+          label: "Action",
+          render: (row) => (
+            <Box display="flex" gap={1}>
+              <Tooltip title="Edit">
+                <IconButton size="small" color="primary" onClick={() => handleEdit(row)}>
+                  <EditIcon />
+                </IconButton>
+              </Tooltip>
+
+              <Tooltip title="Delete">
+                <IconButton size="small" color="error" onClick={() => handleDelete(row)}>
+                  <DeleteIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          ),
+        });
+
+        setColumns(generatedCols);
+      } catch (e) {
+        console.error("Error:", e);
       } finally {
         setLoading(false);
       }
     };
 
     load();
-
-    // ⚡ DO NOT add fetchData — causes infinite loop
-  }, [tenantId, menu, title]);
+  }, [tenantId, menu, title, formSchema, fetchData]);
 
   const handleAddNewRecord = () => {
-    if (!tenantId || !id) return;
     navigate(`/admin/form-viewer/${id}`);
+  };
+
+  const handleEdit = (row) => {
+    setCurrentRow(row);
+    setEditOpen(true);
+  };
+
+  const handleDelete = (row) => {
+    if (window.confirm("Are you sure you want to delete this record?")) {
+      setRows((prev) => prev.filter((x) => x.pk !== row.pk));
+    }
+  };
+
+  // Update only the edited row
+  const handleSaveEdit = (updatedRow) => {
+    setRows((prev) =>
+      prev.map((r) => (r.pk === updatedRow.pk ? { ...r, ...updatedRow } : r))
+    );
   };
 
   return (
     <>
-      <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-        <Typography variant="h6">{title || "Table"}</Typography>
+      <Box display="flex" justifyContent="space-between" mb={2}>
+        <Typography variant="h6">{title}</Typography>
 
-        <Box display="flex" alignItems="center" gap={1}>
+        <Box display="flex" gap={1}>
           {loading && <CircularProgress size={20} />}
 
-          <Tooltip
-            title={hasForm ? "Add new record" : "This menu does not have a form"}
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddNewRecord}
+            disabled={!hasForm}
           >
-            <span>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<AddIcon />}
-                onClick={handleAddNewRecord}
-                disabled={!hasForm}
-              >
-                Add
-              </Button>
-            </span>
-          </Tooltip>
+            Add
+          </Button>
         </Box>
       </Box>
 
-      <DynamicTable
-        columns={columns}
-        rows={rows}
-        isLoading={loading}
-      />
+      <DynamicTable columns={columns} rows={rows} isLoading={loading} />
+
+      {currentRow && (
+        <EditFormDialog
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          formSchema={formSchema}
+          rowData={currentRow}
+          onSave={handleSaveEdit}
+        />
+      )}
     </>
   );
 };

@@ -33,50 +33,21 @@ const exportToExcel = (rows, fileName = "data.xlsx") => {
 };
 
 const DynamicTable = ({ columns = [], rows = [], isLoading = false }) => {
-  /** remove internal fields + rename timestamp */
-  const filteredColumns = columns
-    .filter((c) => c.key !== "pk" && c.key !== "tableName")
-    .map((col) =>
-      col.key === "tstamp" ? { ...col, label: "Created At" } : col
-    );
-
-  const convertedRows = rows.map((r) => ({
-    ...r,
-    tstamp: r.tstamp ? new Date(r.tstamp).toLocaleString() : "",
-  }));
-
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [anchorEl, setAnchorEl] = useState(null);
-
   const [visibleCols, setVisibleCols] = useState({});
-
-  // FIX column selector not updating & infinite loops
-  useEffect(() => {
-    setVisibleCols((prev) => {
-      let changed = false;
-      const updated = { ...prev };
-
-      filteredColumns.forEach((col) => {
-        if (!(col.key in updated)) {
-          updated[col.key] = true;
-          changed = true;
-        }
-      });
-
-      Object.keys(updated).forEach((key) => {
-        if (!filteredColumns.some((c) => c.key === key)) {
-          delete updated[key];
-          changed = true;
-        }
-      });
-
-      return changed ? updated : prev;
-    });
-  }, [filteredColumns]);
-
   const [orderBy, setOrderBy] = useState(null);
   const [order, setOrder] = useState("asc");
+
+  // initialize visible columns
+  useEffect(() => {
+    const updated = {};
+    columns.forEach((col) => {
+      updated[col.key] = true; // all visible initially
+    });
+    setVisibleCols(updated);
+  }, [columns]);
 
   const handleSort = (key) => {
     const isAsc = orderBy === key && order === "asc";
@@ -85,31 +56,31 @@ const DynamicTable = ({ columns = [], rows = [], isLoading = false }) => {
   };
 
   const sortedRows = useMemo(() => {
-    if (!orderBy) return convertedRows;
-
-    return [...convertedRows].sort((a, b) => {
+    if (!orderBy) return rows;
+    return [...rows].sort((a, b) => {
       const av = a[orderBy];
       const bv = b[orderBy];
       if (av < bv) return order === "asc" ? -1 : 1;
       if (av > bv) return order === "asc" ? 1 : -1;
       return 0;
     });
-  }, [convertedRows, order, orderBy]);
+  }, [rows, order, orderBy]);
 
   const paginatedRows = sortedRows.slice(
     page * rowsPerPage,
     page * rowsPerPage + rowsPerPage
   );
 
-  const toggleColumn = (key) =>
+  const toggleColumn = (key) => {
     setVisibleCols((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const getExportRows = () => {
-    const visibleKeys = filteredColumns
+    const visibleKeys = columns
       .filter((c) => visibleCols[c.key])
       .map((c) => c.key);
 
-    return convertedRows.map((r) => {
+    return rows.map((r) => {
       const out = {};
       visibleKeys.forEach((k) => (out[k] = r[k]));
       return out;
@@ -152,11 +123,12 @@ const DynamicTable = ({ columns = [], rows = [], isLoading = false }) => {
           <Typography fontWeight={600} mb={1}>
             Show / Hide Columns
           </Typography>
-          {filteredColumns.map((col) => (
+          {columns.map((col) => (
             <Box key={col.key} display="flex" alignItems="center">
               <Checkbox
                 checked={visibleCols[col.key] || false}
-                onChange={() => toggleColumn(col.key)}
+                onChange={() => !col.fixed && toggleColumn(col.key)} // cannot toggle fixed columns
+                disabled={col.fixed} // disable checkbox if fixed
               />
               {col.label}
             </Box>
@@ -169,17 +141,21 @@ const DynamicTable = ({ columns = [], rows = [], isLoading = false }) => {
         <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: "#f8f9fa" }}>
-              {filteredColumns
+              {columns
                 .filter((c) => visibleCols[c.key])
                 .map((col) => (
                   <TableCell key={col.key}>
-                    <TableSortLabel
-                      active={orderBy === col.key}
-                      direction={orderBy === col.key ? order : "asc"}
-                      onClick={() => handleSort(col.key)}
-                    >
-                      {col.label}
-                    </TableSortLabel>
+                    {col.key !== "action" ? (
+                      <TableSortLabel
+                        active={orderBy === col.key}
+                        direction={orderBy === col.key ? order : "asc"}
+                        onClick={() => handleSort(col.key)}
+                      >
+                        {col.label}
+                      </TableSortLabel>
+                    ) : (
+                      col.label
+                    )}
                   </TableCell>
                 ))}
             </TableRow>
@@ -188,15 +164,11 @@ const DynamicTable = ({ columns = [], rows = [], isLoading = false }) => {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={filteredColumns.length}>
-                  Loading...
-                </TableCell>
+                <TableCell colSpan={columns.length}>Loading...</TableCell>
               </TableRow>
             ) : paginatedRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={filteredColumns.length}>
-                  No Data Found
-                </TableCell>
+                <TableCell colSpan={columns.length}>No Data Found</TableCell>
               </TableRow>
             ) : (
               paginatedRows.map((row, idx) => (
@@ -205,11 +177,11 @@ const DynamicTable = ({ columns = [], rows = [], isLoading = false }) => {
                   hover
                   sx={{ "&:hover": { backgroundColor: "#f5f5f5" } }}
                 >
-                  {filteredColumns
+                  {columns
                     .filter((c) => visibleCols[c.key])
                     .map((col) => (
                       <TableCell key={col.key}>
-                        {row[col.key] ?? ""}
+                        {col.render ? col.render(row) : row[col.key] ?? ""}
                       </TableCell>
                     ))}
                 </TableRow>
@@ -222,7 +194,7 @@ const DynamicTable = ({ columns = [], rows = [], isLoading = false }) => {
       {/* Pagination */}
       <TablePagination
         component="div"
-        count={convertedRows.length}
+        count={rows.length}
         rowsPerPage={rowsPerPage}
         page={page}
         onPageChange={(e, newPage) => setPage(newPage)}

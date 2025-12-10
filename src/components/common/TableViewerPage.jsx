@@ -8,6 +8,10 @@ import {
   Typography,
   CircularProgress,
   IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from "@mui/icons-material";
 
@@ -30,6 +34,10 @@ const TableViewerPage = ({ menu }) => {
   const [editOpen, setEditOpen] = useState(false);
   const [currentRow, setCurrentRow] = useState(null);
 
+  // NEW: Delete dialog states
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [rowToDelete, setRowToDelete] = useState(null);
+
   const navigate = useNavigate();
   const { execute: fetchData } = useApi(apiEndpoints.submitForm.allData, { immediate: false });
 
@@ -43,11 +51,12 @@ const TableViewerPage = ({ menu }) => {
         const response = await fetchData({ tenantId, title });
         const dataArray = response?.data || [];
 
-        // Ensure each row has a unique pk
         const tableRows = dataArray.map((row, index) => ({
           ...row,
-          pk: row.id ?? row.pk ?? index, // fallback if no id
-          createdAt: row.createdAt ? new Date(row.createdAt).toLocaleString() : new Date().toLocaleString(),
+          pk: row.id ?? row.pk ?? index,
+          createdAt: row.createdAt
+            ? new Date(row.createdAt).toLocaleString()
+            : new Date().toLocaleString(),
         }));
 
         setRows(tableRows);
@@ -63,13 +72,13 @@ const TableViewerPage = ({ menu }) => {
           render: (row) => (
             <Box display="flex" gap={1}>
               <Tooltip title="Edit">
-                <IconButton size="small" color="primary" onClick={() => handleEdit(row)}>
+                <IconButton  size="small" color="primary" onClick={() => handleEdit(row)}>
                   <EditIcon />
                 </IconButton>
               </Tooltip>
 
               <Tooltip title="Delete">
-                <IconButton size="small" color="error" onClick={() => handleDelete(row)}>
+                <IconButton  size="small" color="error" onClick={() => openDeleteDialog(row)}>
                   <DeleteIcon />
                 </IconButton>
               </Tooltip>
@@ -97,13 +106,21 @@ const TableViewerPage = ({ menu }) => {
     setEditOpen(true);
   };
 
-  const handleDelete = (row) => {
-    if (window.confirm("Are you sure you want to delete this record?")) {
-      setRows((prev) => prev.filter((x) => x.pk !== row.pk));
-    }
+  // NEW: Open Delete Dialog
+  const openDeleteDialog = (row) => {
+    setRowToDelete(row);
+    setDeleteOpen(true);
   };
 
-  // Update only the edited row
+  // NEW: Confirm delete
+  const confirmDelete = () => {
+    if (!rowToDelete) return;
+    setRows((prev) => prev.filter((x) => x.pk !== rowToDelete.pk));
+    setDeleteOpen(false);
+    setRowToDelete(null);
+  };
+
+  // Update only edited row
   const handleSaveEdit = (updatedRow) => {
     setRows((prev) =>
       prev.map((r) => (r.pk === updatedRow.pk ? { ...r, ...updatedRow } : r))
@@ -140,6 +157,32 @@ const TableViewerPage = ({ menu }) => {
           onSave={handleSaveEdit}
         />
       )}
+
+      {/* DELETE CONFIRMATION DIALOG */}
+      <Dialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Confirm Delete</DialogTitle>
+
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete this record?
+          </Typography>
+        </DialogContent>
+
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setDeleteOpen(false)}>
+            Cancel
+          </Button>
+
+          <Button variant="contained" color="error" onClick={confirmDelete}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

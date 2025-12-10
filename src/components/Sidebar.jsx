@@ -10,6 +10,7 @@ import {
   Menu as MenuIcon,
   Close as CloseIcon,
   Domain,
+  Group,
 } from "@mui/icons-material";
 import { Divider, Tooltip, IconButton } from "@mui/material";
 
@@ -18,24 +19,20 @@ import { MenuContext } from "../context/MenuContext";
 
 const Sidebar = () => {
   const { user } = useContext(AuthContext);
-  const { menus } = useContext(MenuContext); // menus = {tenantId, createdBy, tabs: []}
+  const { menus } = useContext(MenuContext); 
   const location = useLocation();
   const navigate = useNavigate();
 
   const [openSubmenus, setOpenSubmenus] = useState({});
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  /* -------------------------------------------------------
-     SAFE TABS
-  ---------------------------------------------------------*/
+  /* SAFE TABS */
   const tabs = useMemo(() => {
     if (!menus || !Array.isArray(menus.tabs)) return [];
     return menus.tabs;
   }, [menus]);
 
-  /* -------------------------------------------------------
-     Auto-open active parent menu
-  ---------------------------------------------------------*/
+  /* AUTO-OPEN ACTIVE PARENT */
   useEffect(() => {
     if (!tabs.length) return;
 
@@ -60,9 +57,7 @@ const Sidebar = () => {
     setOpenSubmenus((prev) => ({ ...prev, ...openParents }));
   }, [location.pathname, tabs, user?.role]);
 
-  /* -------------------------------------------------------
-     Helpers
-  ---------------------------------------------------------*/
+  /* HELPERS */
   const toggleSubmenu = (id) => (e) => {
     e?.stopPropagation();
     setOpenSubmenus((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -73,9 +68,7 @@ const Sidebar = () => {
     return location.pathname.startsWith(fullPath);
   };
 
-  /* -------------------------------------------------------
-     Recursive Menu Renderer
-  ---------------------------------------------------------*/
+  /* RECURSIVE MENU RENDERER */
   const renderMenuTree = (list, level = 0, parentPath = "") => {
     if (!Array.isArray(list)) return null;
 
@@ -114,9 +107,7 @@ const Sidebar = () => {
                 )}
 
                 <Tooltip title={menu.title} arrow placement="right">
-                  <span className="text-sm font-medium truncate">
-                    {menu.title}
-                  </span>
+                  <span className="text-sm font-medium truncate">{menu.title}</span>
                 </Tooltip>
               </div>
 
@@ -146,16 +137,11 @@ const Sidebar = () => {
     });
   };
 
-  /* -------------------------------------------------------
-     Base paths & roles
-  ---------------------------------------------------------*/
+  /* BASE PATHS */
   const basePath = `/${user?.role}`;
   const isAdmin = user?.role === "admin";
   const isSuperAdmin = user?.role === "superadmin";
 
-  /* -------------------------------------------------------
-     UI
-  ---------------------------------------------------------*/
   return (
     <>
       {/* Mobile hamburger */}
@@ -182,11 +168,9 @@ const Sidebar = () => {
 
         {/* Menu Content */}
         <div className="flex-1 overflow-y-auto px-4 pt-6 pb-4 scrollbar-hide">
+
           {/* Dashboard */}
-          <Link
-            to={`${basePath}/dashboard`}
-            onClick={() => setMobileOpen(false)}
-          >
+          <Link to={`${basePath}/dashboard`} onClick={() => setMobileOpen(false)}>
             <button
               className={`flex items-center gap-3 px-4 py-3 rounded-xl w-full text-sm font-medium transition-all duration-300 cursor-pointer ${
                 location.pathname === `${basePath}/dashboard`
@@ -203,10 +187,7 @@ const Sidebar = () => {
 
           {/* Menu Manager (Admin only) */}
           {isAdmin && (
-            <Link
-              to={`${basePath}/menus`}
-              onClick={() => setMobileOpen(false)}
-            >
+            <Link to={`${basePath}/menus`} onClick={() => setMobileOpen(false)}>
               <button
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl w-full text-sm font-medium transition-all duration-300 cursor-pointer ${
                   location.pathname === `${basePath}/menus`
@@ -224,10 +205,7 @@ const Sidebar = () => {
 
           {/* Organizations (SuperAdmin only) */}
           {isSuperAdmin && (
-            <Link
-              to={`${basePath}/organizations`}
-              onClick={() => setMobileOpen(false)}
-            >
+            <Link to={`${basePath}/organizations`} onClick={() => setMobileOpen(false)}>
               <button
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl w-full text-sm font-medium transition-all duration-300 cursor-pointer ${
                   location.pathname.includes(`${basePath}/organizations`)
@@ -244,6 +222,29 @@ const Sidebar = () => {
           )}
 
           <Divider className="my-4" />
+
+          {/* User Management (Admin only) */}
+          {isAdmin && (
+            <div className="mb-4">
+              <Link
+                to={`${basePath}/user-management`}
+                onClick={() => setMobileOpen(false)}
+              >
+                <button
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl w-full text-sm font-medium transition-all duration-300 cursor-pointer ${
+                    location.pathname.includes(`${basePath}/user-management`)
+                      ? "bg-gradient-to-r from-[#c63bff1a] to-[#e34bff1a] text-[#c63bff]"
+                      : "text-[#c63bff] hover:bg-[#faf5ff]"
+                  }`}
+                >
+                  <Group />
+                  <Tooltip title="User Management" arrow placement="right">
+                    <span className="truncate">User Management</span>
+                  </Tooltip>
+                </button>
+              </Link>
+            </div>
+          )}
 
           {/* Dynamic Menus */}
           {tabs.length > 0 ? (

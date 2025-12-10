@@ -28,6 +28,8 @@ import { MenuContext } from "../context/MenuContext";
 import FormBuilderPage from "./FormBuilderPage";
 import useApi from "../context/useApi";
 import { apiEndpoints } from "../api/endpoints";
+import { v4 as uuidv4 } from "uuid";
+
 /* ---------------- Utilities ---------------- */
 const slugify = (str) =>
   (str || "")
@@ -45,6 +47,15 @@ export default function MenuManagerPage() {
   const [editingMenu, setEditingMenu] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formBuilder, setFormBuilder] = useState(null);
+
+  // const uid = () =>
+  // (window.crypto?.randomUUID?.()) ||
+  // 'xxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+  //   const r = (Math.random() * 16) | 0;
+  //   const v = c === "x" ? r : (r & 0x3) | 0x8;
+  //   return v.toString(16);
+  // });
+
 
   const initialized = useRef(false);
   const theme = useTheme();
@@ -270,7 +281,7 @@ export default function MenuManagerPage() {
               startIcon={<Add />}
               onClick={() => {
                 setEditingMenu({
-                  id: crypto.randomUUID(),
+                  id: uuidv4(),
                   parentId: m.id,
                   title: "",
                   hasForm: false,
@@ -354,7 +365,7 @@ export default function MenuManagerPage() {
         startIcon={<Add />}
         onClick={() => {
           setEditingMenu({
-            id: crypto.randomUUID(),
+            id: uuidv4(),
             parentId: null,
             title: "",
             hasForm: false,

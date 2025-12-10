@@ -34,7 +34,7 @@ const TableViewerPage = ({ menu }) => {
   const [editOpen, setEditOpen] = useState(false);
   const [currentRow, setCurrentRow] = useState(null);
 
-  // NEW: Delete dialog states
+  // NEW:: Delete dialog states
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [rowToDelete, setRowToDelete] = useState(null);
 

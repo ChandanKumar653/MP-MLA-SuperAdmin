@@ -21,12 +21,12 @@ export const MenuProvider = ({ children }) => {
   });
 
   const { getDecodedToken } = useContext(AuthContext);
+    const decoded = getDecodedToken?.();
 
   /* ---------------------------------------
      TOKEN DECODE + EXPIRY VALIDATION
   ---------------------------------------- */
   useEffect(() => {
-    const decoded = getDecodedToken?.();
     if (!decoded) return;
 
     // check expiration
@@ -39,7 +39,7 @@ export const MenuProvider = ({ children }) => {
 
     setMenusState((prev) => ({
       ...prev,
-      tenantId: decoded.tenantId,
+      tenantId: decoded?.tenantId||localStorage.getItem("tenantId"),
       createdBy: decoded.userId || decoded.tenantId
     }));
   }, []);
@@ -47,7 +47,7 @@ export const MenuProvider = ({ children }) => {
   /* ---------------------------------------
      API HOOKS
   ---------------------------------------- */
-  const { execute: fetchMenus } = useApi(apiEndpoints.menus.getAll, { immediate: true });
+  const { execute: fetchMenus } = useApi(decoded?.role==="user"?apiEndpoints.menus.getAllForUser:apiEndpoints.menus.getAll, { immediate: true });
   const { execute: saveMenus } = useApi(apiEndpoints.menus.save, { immediate: false });
 
   /* ---------------------------------------

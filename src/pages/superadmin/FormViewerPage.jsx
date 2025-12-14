@@ -1,10 +1,13 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as Yup from "yup";
 
 import {
+  Box,
+  Paper,
+  Typography,
   TextField,
   Select,
   MenuItem,
@@ -16,16 +19,17 @@ import {
   FormHelperText,
   FormControlLabel,
   Alert,
+  Divider,
+  Stack,
 } from "@mui/material";
 
 import { AuthContext } from "../../context/AuthContext";
 import { MenuContext } from "../../context/MenuContext";
-
 import useApi from "../../context/useApi";
 import { apiEndpoints } from "../../api/endpoints";
 
 /* -------------------------------------------------------
-   NORMALIZER — convert schema → form fields
+   NORMALIZER
 -------------------------------------------------------- */
 const normalizeField = (f) => ({
   id: f.id || f.name,
@@ -52,21 +56,19 @@ const normalizeField = (f) => ({
    MAIN COMPONENT
 -------------------------------------------------------- */
 const FormViewerPage = () => {
-  const { menuId } = useParams();     // ⭐ Path param
+  const { menuId } = useParams();
   const navigate = useNavigate();
 
   const [fields, setFields] = useState([]);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  /* Auth / tenantId */
+  /* Auth */
   const { getDecodedToken } = useContext(AuthContext);
-  const decoded = getDecodedToken?.();
-  const tenantId = decoded?.tenantId;
+  const tenantId = getDecodedToken?.()?.tenantId;
 
-  /* MENU CONTEXT */
+  /* Menu */
   const { menus } = useContext(MenuContext);
 
-  /* Extract correct menu from menu tree */
   const findMenu = (list) => {
     for (let m of list) {
       if (m.id === menuId) return m;
@@ -76,97 +78,111 @@ const FormViewerPage = () => {
     return null;
   };
 
-  const menuObj = findMenu(menus?.tabs || []);
+  const menuObj = useMemo(
+    () => findMenu(menus?.tabs || []),
+    [menus, menuId]
+  );
 
-  const tableName = menuObj?.tableName || null;
+  const tableName = menuObj?.tableName;
   const schema = menuObj?.formSchema || [];
 
-  /* Submit API executor */
-  const { execute: submitFormApi } = useApi(apiEndpoints.submitForm.submit, {
-    immediate: false,
-  });
+  /* API */
+  const { execute: submitFormApi, loading } = useApi(
+    apiEndpoints.submitForm.submit,
+    { immediate: false }
+  );
 
-  /* Load and normalize schema */
+  /* Normalize schema */
   useEffect(() => {
     if (Array.isArray(schema)) {
       setFields(schema.map(normalizeField));
     }
-  }, [schema,menus]);
+  }, [schema]);
 
   /* -------------------------------------------------------
-     YUP VALIDATION BUILDER
+     Validation schema
   -------------------------------------------------------- */
-  const buildValidationSchema = () => {
+  const validationSchema = useMemo(() => {
     const shape = {};
 
     fields.forEach((field) => {
-      let schema;
+      let rule;
 
-      if (field.type === "text") schema = Yup.string();
-      else if (field.type === "email") schema = Yup.string().email("Invalid email format");
-      else if (field.type === "number") schema = Yup.number().typeError("Must be a valid number");
-      else if (field.type === "date") schema = Yup.string();
-      else if (field.type === "select") schema = Yup.string();
-      else if (field.type === "checkbox-group") schema = Yup.array().of(Yup.string());
-      else if (field.type === "file")
-        schema = Yup.mixed().test("req", "File required", (v) => v && v.length > 0);
-      else schema = Yup.string();
+      switch (field.type) {
+        case "email":
+          rule = Yup.string().email("Invalid email");
+          break;
+        case "number":
+          rule = Yup.number().typeError("Must be a number");
+          break;
+        case "checkbox-group":
+          rule = Yup.array().of(Yup.string());
+          break;
+        case "file":
+          rule = Yup.mixed().test(
+            "required",
+            "File required",
+            (v) => !field.required || (v && v.length > 0)
+          );
+          break;
+        default:
+          rule = Yup.string();
+      }
 
-      if (field.required)
-        schema = schema.required(`${field.label} is required`);
+      if (field.required) {
+        rule = rule.required(`${field.label} is required`);
+      }
 
-      if (field.minLength)
-        schema = schema.min(field.minLength, `Min ${field.minLength} characters`);
+      if (field.minLength) {
+        rule = rule.min(field.minLength);
+      }
 
-      if (field.maxLength)
-        schema = schema.max(field.maxLength, `Max ${field.maxLength} characters`);
+      if (field.maxLength) {
+        rule = rule.max(field.maxLength);
+      }
 
       if (field.regex) {
         try {
           const regex = new RegExp(field.regex);
-          schema = schema.test("regex", "Invalid format", (v) => regex.test(v || ""));
+          rule = rule.test("regex", "Invalid format", (v) =>
+            regex.test(v || "")
+          );
         } catch {}
       }
 
-      shape[field.name] = schema;
+      shape[field.name] = rule;
     });
 
     return Yup.object().shape(shape);
-  };
+  }, [fields]);
 
-  /* -------------------------------------------------------
-     REACT HOOK FORM
-  -------------------------------------------------------- */
+  /* Form */
   const {
     register,
     handleSubmit,
-    formState: { errors },
     reset,
+    formState: { errors },
   } = useForm({
-    resolver: yupResolver(buildValidationSchema()),
-    defaultValues: fields.reduce((acc, f) => ({ ...acc, [f.name]: "" }), {}),
+    resolver: yupResolver(validationSchema),
   });
 
-  /* -------------------------------------------------------
-     SUBMIT HANDLER → CALL POST API
-  -------------------------------------------------------- */
+  /* Submit */
   const onSubmit = async (data) => {
     const formatted = Object.fromEntries(
-      Object.entries(data).map(([key, val]) => [
-        key,
-        val instanceof FileList ? Array.from(val).map((f) => f.name) : val,
+      Object.entries(data).map(([k, v]) => [
+        k,
+        v instanceof FileList ? Array.from(v).map((f) => f.name) : v,
       ])
     );
 
-    const payload = {
-      tenantId,
-      title:menuObj.title,
-      tableName,    // ⭐ REQUIRED (dynamic table name)
-      data: formatted,
-    };
-
     try {
-      await submitFormApi(payload);
+      await submitFormApi({
+        tenantId,
+        title: menuObj.title,
+        tableName,
+        data: formatted,
+      });
+
       setSubmitSuccess(true);
       reset();
       setTimeout(() => setSubmitSuccess(false), 2500);
@@ -175,121 +191,153 @@ const FormViewerPage = () => {
     }
   };
 
+  /* Guard */
+  if (!menuObj) {
+    return (
+      <Alert severity="error">
+        Invalid Menu ID: <b>{menuId}</b>
+      </Alert>
+    );
+  }
+
   /* -------------------------------------------------------
      UI
   -------------------------------------------------------- */
-  if (!menuObj) {
-    return <p className="p-6 text-red-600">Invalid Menu ID: {menuId}</p>;
-  }
-
   return (
-    <div className="p-6 max-w-3xl mx-auto bg-white rounded-xl shadow-lg">
+    <Box maxWidth="md" mx="auto" mt={3}>
+      <Paper sx={{ p: 3, borderRadius: 2 }}>
+        {/* Header */}
+        <Box mb={2}>
+          <Typography variant="h5" fontWeight={600}>
+            {menuObj.title}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Please fill the details below
+          </Typography>
+        </Box>
 
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">
-        🧾 {menuObj.title}
-      </h2>
+        <Divider sx={{ mb: 3 }} />
 
-      {submitSuccess && (
-        <Alert severity="success" className="mb-4">
-          Form submitted successfully!
-        </Alert>
-      )}
+        {submitSuccess && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            Form submitted successfully
+          </Alert>
+        )}
 
-      {fields.length === 0 ? (
-        <p className="text-gray-500">No fields configured.</p>
-      ) : (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {fields.map((field) => {
-            const err = errors[field.name]?.message;
+        {fields.length === 0 ? (
+          <Typography color="text.secondary">
+            No fields configured.
+          </Typography>
+        ) : (
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <Stack spacing={3}>
+              {fields.map((field) => {
+                const err = errors[field.name]?.message;
 
-            return (
-              <div key={field.id}>
-                <label className="font-medium mb-2 text-gray-700 block">
-                  {field.label}{" "}
-                  {field.required && <span className="text-red-600">*</span>}
-                </label>
+                return (
+                  <FormControl key={field.id} fullWidth error={!!err}>
+                    <FormLabel sx={{ fontWeight: 500 }}>
+                      {field.label}
+                      {field.required && (
+                        <Typography component="span" color="error">
+                          {" "}*
+                        </Typography>
+                      )}
+                    </FormLabel>
 
-                {/* TEXT / NUMBER / EMAIL / DATE */}
-                {["text", "number", "email", "date"].includes(field.type) && (
-                  <TextField
-                    type={field.type}
-                    {...register(field.name)}
-                    fullWidth
-                    size="small"
-                    error={!!err}
-                    helperText={err}
-                  />
-                )}
+                    {/* INPUTS */}
+                    {["text", "number", "email", "date"].includes(field.type) && (
+                      <TextField
+                        type={field.type}
+                        size="small"
+                        {...register(field.name)}
+                        error={!!err}
+                        helperText={err}
+                      />
+                    )}
 
-                {/* SELECT */}
-                {field.type === "select" && (
-                  <FormControl fullWidth error={!!err}>
-                    <Select {...register(field.name)} defaultValue="">
-                      <MenuItem disabled value="">
-                        Select {field.label}
-                      </MenuItem>
-                      {field.options.map((opt, i) => (
-                        <MenuItem key={i} value={opt}>
-                          {opt}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    <FormHelperText>{err}</FormHelperText>
-                  </FormControl>
-                )}
+                    {/* SELECT */}
+                    {field.type === "select" && (
+                      <>
+                        <Select
+                          size="small"
+                          defaultValue=""
+                          {...register(field.name)}
+                        >
+                          <MenuItem value="" disabled>
+                            Select {field.label}
+                          </MenuItem>
+                          {field.options.map((opt, i) => (
+                            <MenuItem key={i} value={opt}>
+                              {opt}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                        <FormHelperText>{err}</FormHelperText>
+                      </>
+                    )}
 
-                {/* CHECKBOX GROUP */}
-                {field.type === "checkbox-group" && (
-                  <FormControl error={!!err}>
-                    <FormLabel>{field.label}</FormLabel>
-                    <FormGroup>
-                      {field.options.map((opt, i) => (
-                        <FormControlLabel
-                          key={i}
-                          control={<Checkbox value={opt} {...register(field.name)} />}
-                          label={opt}
+                    {/* CHECKBOX GROUP */}
+                    {field.type === "checkbox-group" && (
+                      <>
+                        <FormGroup row>
+                          {field.options.map((opt, i) => (
+                            <FormControlLabel
+                              key={i}
+                              control={
+                                <Checkbox
+                                  value={opt}
+                                  {...register(field.name)}
+                                />
+                              }
+                              label={opt}
+                            />
+                          ))}
+                        </FormGroup>
+                        <FormHelperText>{err}</FormHelperText>
+                      </>
+                    )}
+
+                    {/* FILE */}
+                    {field.type === "file" && (
+                      <>
+                        <TextField
+                          type="file"
+                          inputProps={{ multiple: true }}
+                          {...register(field.name)}
+                          error={!!err}
                         />
-                      ))}
-                    </FormGroup>
-                    <FormHelperText>{err}</FormHelperText>
+                        <FormHelperText>{err}</FormHelperText>
+                      </>
+                    )}
                   </FormControl>
-                )}
+                );
+              })}
+            </Stack>
 
-                {/* FILE UPLOAD */}
-                {field.type === "file" && (
-                  <TextField
-                    type="file"
-                    multiple
-                    {...register(field.name)}
-                    error={!!err}
-                    helperText={err}
-                  />
-                )}
-              </div>
-            );
-          })}
+            {/* ACTIONS */}
+            <Box
+              display="flex"
+              gap={2}
+              justifyContent="flex-end"
+              mt={4}
+            >
+              <Button variant="outlined" onClick={() => navigate(-1)}>
+                Cancel
+              </Button>
 
-          <Button
-            type="submit"
-            variant="contained"
-            color="primary"
-            fullWidth
-            className="py-2 mt-4"
-          >
-            Submit
-          </Button>
-        </form>
-      )}
-
-      <Button
-        variant="outlined"
-        onClick={() => navigate(-1)}
-        className="mt-4"
-        fullWidth
-      >
-        Back
-      </Button>
-    </div>
+              <Button
+                variant="contained"
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? "Submitting..." : "Submit"}
+              </Button>
+            </Box>
+          </form>
+        )}
+      </Paper>
+    </Box>
   );
 };
 

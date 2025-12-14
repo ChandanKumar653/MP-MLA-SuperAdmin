@@ -1,5 +1,5 @@
 // src/components/common/TableViewerPage.jsx
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Button,
@@ -13,12 +13,16 @@ import {
   DialogContent,
   DialogActions,
 } from "@mui/material";
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from "@mui/icons-material";
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+} from "@mui/icons-material";
 
 import useApi from "../../context/useApi";
 import { apiEndpoints } from "../../api/endpoints";
 import { MenuContext } from "../../context/MenuContext";
-import DynamicTable from "./DynamicTable";
+import DynamicTable from "./DynamicTable"; // DataGrid-based
 import EditFormDialog from "./EditFormDialog";
 
 const TableViewerPage = ({ menu }) => {
@@ -27,76 +31,56 @@ const TableViewerPage = ({ menu }) => {
 
   const { id, title, hasForm, formSchema } = menu || {};
 
+  const navigate = useNavigate();
+  const { execute: fetchData } = useApi(
+    apiEndpoints.submitForm.allData,
+    { immediate: false }
+  );
+
   const [rows, setRows] = useState([]);
-  const [columns, setColumns] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const [editOpen, setEditOpen] = useState(false);
   const [currentRow, setCurrentRow] = useState(null);
 
-  // NEW:: Delete dialog states
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [rowToDelete, setRowToDelete] = useState(null);
 
-  const navigate = useNavigate();
-  const { execute: fetchData } = useApi(apiEndpoints.submitForm.allData, { immediate: false });
-
-  // Load table data
+  /* =======================
+     LOAD DATA
+  ======================= */
   useEffect(() => {
     if (!tenantId || !menu) return;
 
     const load = async () => {
       try {
         setLoading(true);
+
         const response = await fetchData({ tenantId, title });
         const dataArray = response?.data || [];
 
         const tableRows = dataArray.map((row, index) => ({
+          id: row.id ?? row.pk ?? index, // REQUIRED for DataGrid
           ...row,
-          pk: row.id ?? row.pk ?? index,
           createdAt: row.createdAt
             ? new Date(row.createdAt).toLocaleString()
             : new Date().toLocaleString(),
         }));
 
         setRows(tableRows);
-
-        const generatedCols =
-          formSchema?.map((f) => ({ key: f.name, label: f.label })) || [];
-
-        generatedCols.push({ key: "createdAt", label: "Created At" });
-
-        generatedCols.push({
-          key: "action",
-          label: "Action",
-          render: (row) => (
-            <Box display="flex" gap={1}>
-              <Tooltip title="Edit">
-                <IconButton  size="small" color="primary" onClick={() => handleEdit(row)}>
-                  <EditIcon />
-                </IconButton>
-              </Tooltip>
-
-              <Tooltip title="Delete">
-                <IconButton  size="small" color="error" onClick={() => openDeleteDialog(row)}>
-                  <DeleteIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          ),
-        });
-
-        setColumns(generatedCols);
       } catch (e) {
-        console.error("Error:", e);
+        console.error("Error loading table data:", e);
       } finally {
         setLoading(false);
       }
     };
 
     load();
-  }, [tenantId, menu, title, formSchema, fetchData]);
+  }, [tenantId, menu, title, fetchData]);
 
+  /* =======================
+     HANDLERS
+  ======================= */
   const handleAddNewRecord = () => {
     navigate(`/admin/form-viewer/${id}`);
   };
@@ -106,33 +90,88 @@ const TableViewerPage = ({ menu }) => {
     setEditOpen(true);
   };
 
-  // NEW: Open Delete Dialog
   const openDeleteDialog = (row) => {
     setRowToDelete(row);
     setDeleteOpen(true);
   };
 
-  // NEW: Confirm delete
   const confirmDelete = () => {
     if (!rowToDelete) return;
-    setRows((prev) => prev.filter((x) => x.pk !== rowToDelete.pk));
+
+    setRows((prev) => prev.filter((r) => r.id !== rowToDelete.id));
     setDeleteOpen(false);
     setRowToDelete(null);
   };
 
-  // Update only edited row
   const handleSaveEdit = (updatedRow) => {
     setRows((prev) =>
-      prev.map((r) => (r.pk === updatedRow.pk ? { ...r, ...updatedRow } : r))
+      prev.map((r) =>
+        r.id === updatedRow.id ? { ...r, ...updatedRow } : r
+      )
     );
   };
 
+  /* =======================
+     COLUMNS (DataGrid)
+  ======================= */
+  const columns = useMemo(() => {
+    const dynamicCols =
+      formSchema?.map((f) => ({
+        field: f.name,
+        headerName: f.label,
+        flex: 1,
+      })) || [];
+
+    return [
+      ...dynamicCols,
+      {
+        field: "createdAt",
+        headerName: "Created At",
+        flex: 1,
+      },
+      {
+        field: "actions",
+        headerName: "Actions",
+        width: 120,
+        sortable: false,
+        filterable: false,
+        renderCell: (params) => (
+          <Box display="flex" gap={1}>
+            <Tooltip title="Edit">
+              <IconButton
+                size="small"
+                color="primary"
+                onClick={() => handleEdit(params.row)}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+
+            <Tooltip title="Delete">
+              <IconButton
+                size="small"
+                color="error"
+                onClick={() => openDeleteDialog(params.row)}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        ),
+      },
+    ];
+  }, [formSchema]);
+
+  /* =======================
+     UI
+  ======================= */
   return (
     <>
+      {/* HEADER */}
       <Box display="flex" justifyContent="space-between" mb={2}>
         <Typography variant="h6">{title}</Typography>
 
-        <Box display="flex" gap={1}>
+        <Box display="flex" gap={1} alignItems="center">
           {loading && <CircularProgress size={20} />}
 
           <Button
@@ -146,8 +185,15 @@ const TableViewerPage = ({ menu }) => {
         </Box>
       </Box>
 
-      <DynamicTable columns={columns} rows={rows} isLoading={loading} />
+      {/* TABLE */}
+      <DynamicTable
+        title={title}
+        columns={columns}
+        rows={rows}
+        isLoading={loading}
+      />
 
+      {/* EDIT DIALOG */}
       {currentRow && (
         <EditFormDialog
           open={editOpen}
@@ -158,7 +204,7 @@ const TableViewerPage = ({ menu }) => {
         />
       )}
 
-      {/* DELETE CONFIRMATION DIALOG */}
+      {/* DELETE CONFIRMATION */}
       <Dialog
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}

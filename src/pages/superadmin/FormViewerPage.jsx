@@ -18,11 +18,11 @@ import {
   Alert,
 } from "@mui/material";
 
-import { AuthContext } from "../context/AuthContext";
-import { MenuContext } from "../context/MenuContext";
+import { AuthContext } from "../../context/AuthContext";
+import { MenuContext } from "../../context/MenuContext";
 
-import useApi from "../context/useApi";
-import { apiEndpoints } from "../api/endpoints";
+import useApi from "../../context/useApi";
+import { apiEndpoints } from "../../api/endpoints";
 
 /* -------------------------------------------------------
    NORMALIZER — convert schema → form fields

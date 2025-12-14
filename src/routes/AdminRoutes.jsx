@@ -1,12 +1,12 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "../layouts/Layout";
-import DashboardPage from "../pages/Dashboard";
-import MenuManagerPage from "../pages/MenuManagerPage";
-import FormViewerPage from "../pages/FormViewerPage";
+import DashboardPage from "../pages/superadmin/dashboard/Dashboard";
+import MenuManagerPage from "../pages/superadmin/MenuManagerPage";
+import FormViewerPage from "../pages/superadmin/FormViewerPage";
 import TableViewerPage from "../components/common/TableViewerPage";
 import NotFoundPage from "../pages/NotFoundPage";
 
-import UserManagementPage from "../pages/UserManagementPage"; // Admin can view
+import UsersList from "../pages/admin/user-management/UsersList"; 
 import { useContext, useMemo } from "react";
 import { MenuContext } from "../context/MenuContext";
 
@@ -57,7 +57,7 @@ const AdminRoutes = () => {
         <Route path="form-viewer/:menuId" element={<FormViewerPage />} />
 
         {/* ADMIN ONLY: USER MANAGEMENT */}
-        <Route path="user-management" element={<UserManagementPage />} />
+        <Route path="users" element={<UsersList />} />
 
         {/* DYNAMIC ROUTES */}
         {dynamicRoutes}

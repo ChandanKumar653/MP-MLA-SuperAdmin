@@ -227,12 +227,12 @@ const Sidebar = () => {
           {isAdmin && (
             <div className="mb-4">
               <Link
-                to={`${basePath}/user-management`}
+                to={`${basePath}/users`}
                 onClick={() => setMobileOpen(false)}
               >
                 <button
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl w-full text-sm font-medium transition-all duration-300 cursor-pointer ${
-                    location.pathname.includes(`${basePath}/user-management`)
+                    location.pathname.includes(`${basePath}/users`)
                       ? "bg-gradient-to-r from-[#c63bff1a] to-[#e34bff1a] text-[#c63bff]"
                       : "text-[#c63bff] hover:bg-[#faf5ff]"
                   }`}

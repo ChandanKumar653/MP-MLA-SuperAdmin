@@ -36,6 +36,8 @@ const Login = () => {
         return apiEndpoints.auth.superadminLogin;
       case "admin":
         return apiEndpoints.auth.adminLogin;
+      case "user":
+        return apiEndpoints.auth.userLogin;
       default:
         return apiEndpoints.auth.userLogin;
     }
@@ -57,14 +59,24 @@ const Login = () => {
       // console.log(response);
 
       localStorage.setItem("token", response?.token);
+      if(role==="user"){
+          login({
+        email: response?.user?.email,
+        role: role,
+        token:response?.token,
+        userId: response?.user?.userId,
+        tenantId: response?.user?.tenantId,
+      })
+      }else{
       login({
         email: response?.user?.name,
         role: response?.role,
         token:response?.token
       });
+    }
 
       // navigate(`/${response?.role}/dashboard`);
-      window.location.href = `/${response?.role}/dashboard`;
+      window.location.href = `/${role}/dashboard`;
     } catch (err) {
       console.error("Login error:", err);
       if (err.response) {

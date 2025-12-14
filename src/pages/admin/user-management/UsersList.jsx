@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import {
   Box,
   Button,
@@ -10,42 +10,40 @@ import {
   MenuItem,
   IconButton,
   Typography,
+  Paper,
+  Snackbar,
+  Alert,
+  Divider,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { MenuContext } from "../../../context/MenuContext";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import toast from "react-hot-toast";
+import AddIcon from '@mui/icons-material/Add';
 
-/* =======================
-   DUMMY DATA
-======================= */
-const initialRows = [
-  {
-    id: 1,
-    name: "John Doe",
-    email: "john@example.com",
-    phone: "9876543210",
-    status: "Active",
-    createdBy: "TENANT_001",
-  },
-  {
-    id: 2,
-    name: "Jane Smith",
-    email: "jane@example.com",
-    phone: "9123456789",
-    status: "Inactive",
-    createdBy: "TENANT_001",
-  },
-];
+import copy from "copy-to-clipboard";
+
+import { MenuContext } from "../../../context/MenuContext";
+import useApi from "../../../context/useApi";
+import { apiEndpoints } from "../../../api/endpoints";
 
 export default function UserList() {
   const { menus } = useContext(MenuContext);
-  const tenantId = menus?.tenantId || "TENANT_001";
+  const tenantId = menus?.tenantId;
 
-  const [rows, setRows] = useState(initialRows);
+  const getUsersApi = useApi(apiEndpoints.usersManagement.getAll, { immediate: false });
+  const createUserApi = useApi(apiEndpoints.usersManagement.create, { immediate: false });
+  const updateUserApi = useApi(apiEndpoints.usersManagement.update, { immediate: false });
+  const deleteUserApi = useApi(apiEndpoints.usersManagement.remove, { immediate: false });
 
+  const [rows, setRows] = useState([]);
   const [openForm, setOpenForm] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
+  const [openCredentials, setOpenCredentials] = useState(false);
+  const [snackOpen, setSnackOpen] = useState(false);
+  const[refresh, setRefresh]=useState(false);
 
   const [isEdit, setIsEdit] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -57,15 +55,37 @@ export default function UserList() {
     status: "",
   });
 
-  const isFormValid =
-    formData.name &&
-    formData.email &&
-    formData.phone &&
-    formData.status;
+  const [credentials, setCredentials] = useState({
+    email: "",
+    userId: "",
+    password: "",
+  });
 
-  /* =======================
-     HANDLERS
-  ======================= */
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const fetchUsers = async () => {
+      try {
+        const res = await getUsersApi.execute(tenantId);
+        const list = res?.data || [];
+
+        setRows(
+          list.map((u) => ({
+            id: u.userId,
+            userId: u.userId,
+            name: u.name,
+            email: u.email,
+            phone: u.phone,
+            status: u.status,
+          }))
+        );
+      } catch (err) {
+        console.error("Fetch users failed", err);
+      }
+    };
+
+    fetchUsers();
+  }, [tenantId,refresh]);
 
   const handleAdd = () => {
     setIsEdit(false);
@@ -76,83 +96,92 @@ export default function UserList() {
   const handleEdit = (row) => {
     setIsEdit(true);
     setSelectedUser(row);
-    setFormData({
-      name: row.name,
-      email: row.email,
-      phone: row.phone,
-      status: row.status,
-    });
+    setFormData(row);
     setOpenForm(true);
+    setRefresh(!refresh);
   };
 
-  const handleDeleteClick = (row) => {
-    setSelectedUser(row);
-    setOpenDelete(true);
-  };
-
-  const handleDeleteConfirm = () => {
-    setRows((prev) => prev.filter((r) => r.id !== selectedUser.id));
-    setOpenDelete(false);
-    setSelectedUser(null);
-  };
-
-  const handleSave = () => {
-    if (!isFormValid) return;
-
-    if (isEdit) {
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === selectedUser.id ? { ...r, ...formData } : r
-        )
-      );
-    } else {
-      setRows((prev) => [
-        ...prev,
-        {
-          id: prev.length + 1,
+  const handleSave = async () => {
+    try {
+      if (isEdit) {
+        await updateUserApi.execute(selectedUser.userId, formData);
+        setRows((prev) =>
+          prev.map((r) =>
+            r.userId === selectedUser.userId ? { ...r, ...formData } : r
+          )
+        );
+        setOpenForm(false);
+      } else {
+        const res = await createUserApi.execute({
           ...formData,
           createdBy: tenantId,
-        },
-      ]);
+        });
+
+        const { userId, defaultPassword } = res;
+
+        setRows((prev) => [
+          ...prev,
+          { id: userId, userId, ...formData },
+        ]);
+
+        setCredentials({
+          email: formData.email,
+          userId,
+          password: defaultPassword,
+        });
+
+        setOpenForm(false);
+        setOpenCredentials(true);
+      }
+    } catch (err) {
+      console.error("Save failed", err);
     }
-
-    setOpenForm(false);
   };
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+const handleDeleteConfirm = async () => {
+  try {
+    await deleteUserApi.execute(selectedUser.userId);
 
-  /* =======================
-     COLUMNS
-  ======================= */
+    toast.success("User deleted successfully");
+
+    setRefresh(!refresh);
+
+    setOpenDelete(false);
+  } catch (error) {
+    console.error("Delete failed:", error);
+
+    toast.error(
+      error?.message || "Failed to delete user. Please try again."
+    );
+  }
+};
+
+  const handleCopyAll = () => {
+    const text = `
+Email: ${credentials.email}
+User ID: ${credentials.userId}
+Password: ${credentials.password}
+    `;
+    copy(text.trim());
+    setSnackOpen(true);
+  };
 
   const columns = [
-    { field: "id", headerName: "ID", width: 80 },
-    { field: "name", headerName: "Name", width: 150 },
-    { field: "email", headerName: "Email", width: 220 },
-    { field: "phone", headerName: "Phone", width: 150 },
+    { field: "name", headerName: "Name", flex: 1 },
+    { field: "email", headerName: "Email", flex: 1.5 },
+    { field: "userId", headerName: "User ID", flex: 1 },
+    { field: "phone", headerName: "Phone", flex: 1 },
     { field: "status", headerName: "Status", width: 120 },
-    { field: "createdBy", headerName: "Created By", width: 150 },
-
     {
       field: "actions",
       headerName: "Actions",
       width: 120,
-      sortable: false,
       renderCell: (params) => (
         <>
-          <IconButton
-            color="primary"
-            onClick={() => handleEdit(params.row)}
-          >
+          <IconButton onClick={() => handleEdit(params.row)}>
             <EditIcon />
           </IconButton>
-
-          <IconButton
-            color="error"
-            onClick={() => handleDeleteClick(params.row)}
-          >
+          <IconButton color="error" onClick={() => { setSelectedUser(params.row); setOpenDelete(true); }}>
             <DeleteIcon />
           </IconButton>
         </>
@@ -160,108 +189,91 @@ export default function UserList() {
     },
   ];
 
-  /* =======================
-     UI
-  ======================= */
-
   return (
-    <Box sx={{ width: "100%" }}>
-      {/* Header */}
+    <Paper sx={{ p: 3, borderRadius: 2 }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
-        <Typography variant="h6">User List</Typography>
-        <Button variant="contained" onClick={handleAdd}>
-          Add
-        </Button>
+        <Typography variant="h6">User Management</Typography>
+        <Button variant="contained" onClick={handleAdd}><AddIcon/> Add User</Button>
       </Box>
 
-      {/* Table */}
-      <Box sx={{ height: 420 }}>
-        <DataGrid rows={rows} columns={columns} />
+      <Box sx={{ height: 450 }}>
+        <DataGrid rows={rows} columns={columns} loading={getUsersApi.loading} />
       </Box>
 
-      {/* ADD / EDIT DIALOG */}
+      {/* ADD / EDIT */}
       <Dialog open={openForm} onClose={() => setOpenForm(false)} fullWidth>
-        <DialogTitle>{isEdit ? "Edit User" : "Add User"}</DialogTitle>
-
+        <DialogTitle>{isEdit ? "Edit User" : "Create User"}</DialogTitle>
         <DialogContent>
-          <TextField
-            margin="dense"
-            label="Name"
-            name="name"
-            fullWidth
-            value={formData.name}
-            onChange={handleChange}
-          />
-
-          <TextField
-            margin="dense"
-            label="Email"
-            name="email"
-            fullWidth
-            value={formData.email}
-            onChange={handleChange}
-          />
-
-          <TextField
-            margin="dense"
-            label="Phone"
-            name="phone"
-            fullWidth
-            value={formData.phone}
-            onChange={handleChange}
-          />
-
-          <TextField
-            margin="dense"
-            label="Status"
-            name="status"
-            select
-            fullWidth
-            value={formData.status}
-            onChange={handleChange}
-          >
+          {["name", "email", "phone"].map((field) => (
+            <TextField
+              key={field}
+              fullWidth
+              margin="dense"
+              label={field.toUpperCase()}
+              name={field}
+              value={formData[field]}
+              onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
+            />
+          ))}
+          <TextField fullWidth margin="dense" label="Status" select name="status" value={formData.status}
+            onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
             <MenuItem value="Active">Active</MenuItem>
             <MenuItem value="Inactive">Inactive</MenuItem>
           </TextField>
-
-          {/* CREATED BY - READ ONLY */}
-          {isEdit && (
-            <TextField
-              margin="dense"
-              label="Created By"
-              fullWidth
-              value={selectedUser?.createdBy}
-              disabled
-            />
-          )}
         </DialogContent>
-
         <DialogActions>
           <Button onClick={() => setOpenForm(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleSave}
-            disabled={!isFormValid}
-          >
-            Save
-          </Button>
+          <Button variant="contained" onClick={handleSave}>Save</Button>
         </DialogActions>
       </Dialog>
 
-      {/* DELETE CONFIRMATION */}
+      {/* DELETE */}
       <Dialog open={openDelete} onClose={() => setOpenDelete(false)}>
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
-          Are you sure you want to delete{" "}
-          <b>{selectedUser?.name}</b>?
+          Delete <b>{selectedUser?.name}</b> permanently?
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenDelete(false)}>Cancel</Button>
-          <Button color="error" variant="contained" onClick={handleDeleteConfirm}>
-            Delete
-          </Button>
+          <Button color="error" variant="contained" onClick={handleDeleteConfirm}>Delete</Button>
         </DialogActions>
       </Dialog>
-    </Box>
+
+      {/* CREDENTIALS */}
+      <Dialog open={openCredentials} disableEscapeKeyDown>
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <CheckCircleIcon color="success" /> User Created Successfully
+        </DialogTitle>
+        <DialogContent>
+          <Typography color="error" sx={{ mb: 2 }}>
+            Copy credentials now. They will not be shown again.
+          </Typography>
+
+          <Divider sx={{ mb: 2 }} />
+
+          {Object.entries(credentials).map(([key, value]) => (
+            <TextField key={key} fullWidth margin="dense" label={key.toUpperCase()} value={value} InputProps={{ readOnly: true }} />
+          ))}
+
+          <Button
+            fullWidth
+            startIcon={<ContentCopyIcon />}
+            sx={{ mt: 2 }}
+            variant="contained"
+            onClick={handleCopyAll}
+          >
+            Copy All Credentials
+          </Button>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenCredentials(false)}>Done</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* SNACKBAR */}
+      <Snackbar open={snackOpen} autoHideDuration={3000} onClose={() => setSnackOpen(false)}>
+        <Alert severity="success">Credentials copied successfully</Alert>
+      </Snackbar>
+    </Paper>
   );
 }

@@ -7,21 +7,34 @@ export const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
+  const [role, setRole] = useState(null);
+  const [tenantId, setTenantId] = useState(null);
+  const [userId, setUserId] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("user"));
     const storedToken = localStorage.getItem("token");
+    const storedRole = localStorage.getItem("role");
+    const storedTenantId = localStorage.getItem("tenantId");
+    const storedUserId = localStorage.getItem("userId");
+
     if (storedUser) setUser(storedUser);
     if (storedToken) setToken(storedToken);
+    if (storedRole) setRole(storedRole);
+    if (storedTenantId) setTenantId(storedTenantId);
+    if (storedUserId) setUserId(storedUserId);
   }, []);
 
-  const login = ({ username, role, token }) => {
+  const login = ({ username, role, token,tenantId,userId}) => {
     const loggedInUser = { username, role };
     setUser(loggedInUser);
     setToken(token);
     localStorage.setItem("user", JSON.stringify(loggedInUser));
     localStorage.setItem("token", token);
+    localStorage.setItem("tenantId", tenantId);
+    localStorage.setItem("role", role);
+    localStorage.setItem("userId", userId);
   };
 
   const logout = () => {
@@ -29,6 +42,9 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     localStorage.removeItem("user");
     localStorage.removeItem("token");
+    localStorage.removeItem("tenantId");
+    localStorage.removeItem("role");
+    localStorage.removeItem("userId");
   };
 
   useEffect(() => {
@@ -55,7 +71,7 @@ const getDecodedToken = () => {
 };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout,getDecodedToken }}>
+    <AuthContext.Provider value={{ user, token, login, logout,getDecodedToken,role,tenantId,userId }}>
       {children}
     </AuthContext.Provider>
   );

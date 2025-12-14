@@ -61,7 +61,7 @@ export default function Organizations() {
   const { execute: fetchAll } = useApi(apiEndpoints.organizations.getAll, {
     immediate: false,
   });
-  const { execute: deleteApi } = useApi(apiEndpoints.organizations.delete);
+  const { execute: deleteApi } = useApi(apiEndpoints.organizations.remove);
   const { execute: toggleApi } = useApi(apiEndpoints.organizations.toggleStatus);
 
   // ---------------- Fetch Organizations ----------------
@@ -70,14 +70,16 @@ export default function Organizations() {
       setLoading(true);
       const res = await fetchAll({ force: Date.now() }); // avoid caching
       let list = res?.data || [];
+      // console.log("Fetched Organizations:", list);
 
       // Sort by timestamp → latest first
       list.sort((a, b) => new Date(b.tstamp) - new Date(a.tstamp));
 
       setData(list);
+      setLoading(false);
+
     } catch (err) {
       toast.error("Failed to fetch organizations.");
-    } finally {
       setLoading(false);
     }
   };

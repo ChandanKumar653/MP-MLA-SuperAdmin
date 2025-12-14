@@ -1,8 +1,8 @@
 import api from "./axios";
 
 export const apiEndpoints = {
-  users: {
-    getAll: () => api.get("/users"),
+  usersManagement: {
+    getAll: (id) => api.get(`/super-admin/user?tenantId=${id}`),
     getById: (id) => api.get(`/users/${id}`),
     create: (data) => api.post("/users", data),
     update: (id, data) => api.put(`/users/${id}`, data),

@@ -1,7 +1,7 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "../layouts/Layout";
-import DashboardPage from "../pages/Dashboard";
+import DashboardPage from "../pages/superadmin/dashboard/Dashboard";
 import Organizations from "../pages/superadmin/Organizations";
 import AdminRoutes from "./AdminRoutes"; // For entering admin portal
 import UserRoutes from "./UserRoutes";   // Optional: entering user portal

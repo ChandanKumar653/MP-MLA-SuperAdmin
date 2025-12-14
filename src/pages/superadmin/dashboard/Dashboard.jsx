@@ -1,8 +1,8 @@
-import StatCard from "../components/StatCard";
-import RevenueChart from "../components/RevenueChart";
-import TopOrgs from "../components/TopOrgs";
+import StatCard from "../../../components/StatCard";
+import RevenueChart from "../../../components/RevenueChart";
+import TopOrgs from "../../../components/TopOrgs";
 import { MdGroups, MdAdminPanelSettings, MdPeople } from "react-icons/md";
-import {MenuContext} from "../context/MenuContext"; 
+import {MenuContext} from "../../../context/MenuContext"; 
 
 import { useContext } from "react";
 const Dashboard = () =>{

@@ -4,102 +4,127 @@ import React, {
   useCallback,
   useEffect,
   useContext,
+  useRef,
 } from "react";
+import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+
 import { apiEndpoints } from "../api/endpoints";
 import useApi from "../context/useApi";
-import toast from "react-hot-toast";
 import { AuthContext } from "./AuthContext";
-import { useNavigate } from "react-router-dom";
-export const MenuContext = createContext();
+
+export const MenuContext = createContext(null);
 
 export const MenuProvider = ({ children }) => {
-  const navigate=useNavigate();
+  const navigate = useNavigate();
+  const fetchedRef = useRef(false);
+
+  const { getDecodedToken } = useContext(AuthContext);
+
+  /* ---------------------------------------
+     STABLE AUTH STATE (KEY FIX)
+  ---------------------------------------- */
+  const [decodedUser, setDecodedUser] = useState(null);
+
   const [menus, setMenusState] = useState({
     tenantId: null,
     createdBy: null,
-    tabs: []
+    tabs: [],
   });
 
-  const { getDecodedToken } = useContext(AuthContext);
-    const decoded = getDecodedToken?.();
-
   /* ---------------------------------------
-     TOKEN DECODE + EXPIRY VALIDATION
+     DECODE TOKEN ONCE
   ---------------------------------------- */
   useEffect(() => {
+    const decoded = getDecodedToken?.();
     if (!decoded) return;
 
-    // check expiration
+    // Token expired
     if (decoded.exp * 1000 < Date.now()) {
       localStorage.clear();
-      // navigate
-      window.location.href = "/login";
+      navigate("/login", { replace: true });
       return;
     }
 
+    setDecodedUser(decoded);
     setMenusState((prev) => ({
       ...prev,
-      tenantId: decoded?.tenantId||localStorage.getItem("tenantId"),
-      createdBy: decoded.userId || decoded.tenantId
+      tenantId: decoded.tenantId || localStorage.getItem("tenantId"),
+      createdBy: decoded.userId || decoded.tenantId,
     }));
-  }, []);
+  }, [getDecodedToken, navigate]);
 
   /* ---------------------------------------
-     API HOOKS
+     API HOOKS (DEPEND ON decodedUser)
   ---------------------------------------- */
-  const { execute: fetchMenus } = useApi(decoded?.role==="user"?apiEndpoints.menus.getAllForUser:apiEndpoints.menus.getAll, { immediate: true });
-  const { execute: saveMenus } = useApi(apiEndpoints.menus.save, { immediate: false });
+  const { execute: fetchMenus } = useApi(
+    decodedUser?.role === "user"
+      ? apiEndpoints.menus.getAllForUser
+      : apiEndpoints.menus.getAll,
+    { immediate: false }
+  );
+
+  const { execute: saveMenus } = useApi(apiEndpoints.menus.save, {
+    immediate: false,
+  });
 
   /* ---------------------------------------
-     LOAD MENUS FROM BACKEND
+     LOAD MENUS (ONCE PER TENANT)
   ---------------------------------------- */
   useEffect(() => {
-    if (!menus.tenantId) return;
+    if (!menus.tenantId || !decodedUser || fetchedRef.current) return;
 
-    const load = async () => {
+    const loadMenus = async () => {
       try {
+        fetchedRef.current = true;
+
         const res = await fetchMenus(menus.tenantId);
-        const raw = res?.data?.data; // string
+        const raw = res?.data?.data;
 
         let tabs = [];
-        if (raw) {
+
+        if (Array.isArray(raw)) {
+          tabs = raw?.[0]?.tabs || [];
+        } else if (typeof raw === "string") {
           try {
             const parsed = JSON.parse(raw);
             tabs = parsed?.[0]?.tabs || [];
           } catch (err) {
-            console.error("Menu parse failed:", err);
-            tabs = [];
+            console.error("Menu JSON parse error:", err);
           }
         }
 
         setMenusState((prev) => ({ ...prev, tabs }));
       } catch (err) {
+        fetchedRef.current = false;
         console.error("Failed to load menus:", err);
-        setMenusState((prev) => ({ ...prev, tabs: [] }));
         toast.error("Failed to load menus");
       }
     };
 
-    load();
-  }, [menus.tenantId]);
+    const decoded = getDecodedToken?.();
+
+    if (decoded?.role !== "superadmin") {
+      loadMenus();
+    }
+  }, [menus.tenantId, decodedUser, fetchMenus]);
 
   /* ---------------------------------------
-     setMenus — handles deep updates
+     SAFE SETTER
   ---------------------------------------- */
   const setMenus = useCallback((value) => {
     setMenusState((prev) => {
-      const updated =
-        typeof value === "function" ? value(prev) : value;
+      const updated = typeof value === "function" ? value(prev) : value;
 
       return {
         ...prev,
-        tabs: updated.tabs
+        ...updated,
       };
     });
   }, []);
 
   /* ---------------------------------------
-     SAVE MENU SCHEMA — FIXED TO SEND ARRAY
+     SAVE MENU SCHEMA
   ---------------------------------------- */
   const saveMenuSchema = async ({ tabs }) => {
     try {
@@ -107,18 +132,24 @@ export const MenuProvider = ({ children }) => {
         tenantId: menus.tenantId,
         createdBy: menus.createdBy,
         schemaVersion: 1,
-        data: [{ tabs }]  // 👈 REAL ARRAY, NOT STRING
+        data: [{ tabs }],
       });
 
       toast.success("Menu updated successfully");
     } catch (err) {
-      console.error("Save menus failed:", err);
+      console.error("Save menu failed:", err);
       toast.error("Failed to update menus");
     }
   };
 
   return (
-    <MenuContext.Provider value={{ menus, setMenus, saveMenuSchema }}>
+    <MenuContext.Provider
+      value={{
+        menus,
+        setMenus,
+        saveMenuSchema,
+      }}
+    >
       {children}
     </MenuContext.Provider>
   );

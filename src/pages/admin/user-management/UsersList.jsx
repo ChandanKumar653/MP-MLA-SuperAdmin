@@ -28,10 +28,12 @@ import copy from "copy-to-clipboard";
 import { MenuContext } from "../../../context/MenuContext";
 import useApi from "../../../context/useApi";
 import { apiEndpoints } from "../../../api/endpoints";
+// import { AuthContext } from "../../../context/AuthContext";   
 
 export default function UserList() {
   const { menus } = useContext(MenuContext);
   const tenantId = menus?.tenantId;
+  // const {role}=useContext(AuthContext);
 
   const getUsersApi = useApi(apiEndpoints.usersManagement.getAll, { immediate: false });
   const createUserApi = useApi(apiEndpoints.usersManagement.create, { immediate: false });
@@ -82,7 +84,7 @@ export default function UserList() {
       } catch (err) {
         console.error("Fetch users failed", err);
       }
-    };
+    }; 
 
     fetchUsers();
   }, [tenantId,refresh]);
@@ -129,12 +131,13 @@ export default function UserList() {
           userId,
           password: defaultPassword,
         });
-
+        toast.success(res?.data?.message||"User created successfully");
         setOpenForm(false);
         setOpenCredentials(true);
       }
     } catch (err) {
       console.error("Save failed", err);
+      toast.error(err?.response?.data?.message || "Failed to save user. Please try again.");
     }
   };
 

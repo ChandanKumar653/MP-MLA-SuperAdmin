@@ -13,13 +13,10 @@ import {
   MenuItem,
   Button,
   Checkbox,
-  FormControl,
-  FormLabel,
   FormGroup,
   FormHelperText,
   FormControlLabel,
   Alert,
-  Divider,
   Stack,
 } from "@mui/material";
 
@@ -45,7 +42,7 @@ const normalizeField = (f) => ({
       : f.type === "file"
       ? "file"
       : f.type,
-  required: f.required || false,
+  required: !!f.required,
   minLength: f.minLength || null,
   maxLength: f.maxLength || null,
   regex: f.regex || "",
@@ -133,13 +130,8 @@ const FormViewerPage = () => {
         rule = rule.required(`${field.label} is required`);
       }
 
-      if (field.minLength) {
-        rule = rule.min(field.minLength);
-      }
-
-      if (field.maxLength) {
-        rule = rule.max(field.maxLength);
-      }
+      if (field.minLength) rule = rule.min(field.minLength);
+      if (field.maxLength) rule = rule.max(field.maxLength);
 
       if (field.regex) {
         try {
@@ -204,22 +196,20 @@ const FormViewerPage = () => {
      UI
   -------------------------------------------------------- */
   return (
-    <Box maxWidth="md" mx="auto" mt={3}>
-      <Paper sx={{ p: 3, borderRadius: 2 }}>
+    <Box maxWidth="md" mx="auto" mt={4}>
+      <Paper sx={{ p: 4 }}>
         {/* Header */}
-        <Box mb={2}>
+        <Box mb={4}>
           <Typography variant="h5" fontWeight={600}>
             {menuObj.title}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Please fill the details below
+            Fill in the details below
           </Typography>
         </Box>
 
-        <Divider sx={{ mb: 3 }} />
-
         {submitSuccess && (
-          <Alert severity="success" sx={{ mb: 2 }}>
+          <Alert severity="success" sx={{ mb: 3 }}>
             Form submitted successfully
           </Alert>
         )}
@@ -235,21 +225,31 @@ const FormViewerPage = () => {
                 const err = errors[field.name]?.message;
 
                 return (
-                  <FormControl key={field.id} fullWidth error={!!err}>
-                    <FormLabel sx={{ fontWeight: 500 }}>
+                  <Box key={field.id}>
+                    {/* LABEL */}
+                    <Typography
+                      variant="body2"
+                      fontWeight={500}
+                      mb={0.5}
+                    >
                       {field.label}
                       {field.required && (
-                        <Typography component="span" color="error">
+                        <Typography
+                          component="span"
+                          color="error"
+                          fontWeight={600}
+                        >
                           {" "}*
                         </Typography>
                       )}
-                    </FormLabel>
+                    </Typography>
 
-                    {/* INPUTS */}
+                    {/* TEXT / NUMBER / EMAIL / DATE */}
                     {["text", "number", "email", "date"].includes(field.type) && (
                       <TextField
                         type={field.type}
                         size="small"
+                        fullWidth
                         {...register(field.name)}
                         error={!!err}
                         helperText={err}
@@ -261,8 +261,10 @@ const FormViewerPage = () => {
                       <>
                         <Select
                           size="small"
+                          fullWidth
                           defaultValue=""
                           {...register(field.name)}
+                          error={!!err}
                         >
                           <MenuItem value="" disabled>
                             Select {field.label}
@@ -273,14 +275,18 @@ const FormViewerPage = () => {
                             </MenuItem>
                           ))}
                         </Select>
-                        <FormHelperText>{err}</FormHelperText>
+                        {err && (
+                          <FormHelperText error>
+                            {err}
+                          </FormHelperText>
+                        )}
                       </>
                     )}
 
                     {/* CHECKBOX GROUP */}
                     {field.type === "checkbox-group" && (
                       <>
-                        <FormGroup row>
+                        <FormGroup>
                           {field.options.map((opt, i) => (
                             <FormControlLabel
                               key={i}
@@ -294,7 +300,11 @@ const FormViewerPage = () => {
                             />
                           ))}
                         </FormGroup>
-                        <FormHelperText>{err}</FormHelperText>
+                        {err && (
+                          <FormHelperText error>
+                            {err}
+                          </FormHelperText>
+                        )}
                       </>
                     )}
 
@@ -303,14 +313,19 @@ const FormViewerPage = () => {
                       <>
                         <TextField
                           type="file"
+                          fullWidth
                           inputProps={{ multiple: true }}
                           {...register(field.name)}
                           error={!!err}
                         />
-                        <FormHelperText>{err}</FormHelperText>
+                        {err && (
+                          <FormHelperText error>
+                            {err}
+                          </FormHelperText>
+                        )}
                       </>
                     )}
-                  </FormControl>
+                  </Box>
                 );
               })}
             </Stack>
@@ -318,9 +333,9 @@ const FormViewerPage = () => {
             {/* ACTIONS */}
             <Box
               display="flex"
-              gap={2}
               justifyContent="flex-end"
-              mt={4}
+              gap={2}
+              mt={5}
             >
               <Button variant="outlined" onClick={() => navigate(-1)}>
                 Cancel

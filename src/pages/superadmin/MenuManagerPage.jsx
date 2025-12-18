@@ -1,11 +1,4 @@
-import React, {
-  useContext,
-  useState,
-  useMemo,
-  useEffect,
-  useCallback,
-  useRef,
-} from "react";
+import React, { useContext, useState, useMemo, useEffect, useRef } from "react";
 import {
   Button,
   Dialog,
@@ -21,7 +14,15 @@ import {
   useTheme,
   CircularProgress,
 } from "@mui/material";
-import { Add, Delete, Edit, List, Save, CheckCircle, CloudUpload } from "@mui/icons-material";
+import {
+  Add,
+  Delete,
+  Edit,
+  List,
+  Save,
+  CheckCircle,
+  CloudUpload,
+} from "@mui/icons-material";
 
 import Swal from "sweetalert2";
 import { MenuContext } from "../../context/MenuContext";
@@ -41,21 +42,12 @@ const slugify = (str) =>
 /* ---------------- MAIN ---------------- */
 export default function MenuManagerPage() {
   const { menus, setMenus, saveMenuSchema } = useContext(MenuContext);
-   const tenantId = menus?.tenantId;  
+  const tenantId = menus?.tenantId;
   const tabs = menus?.tabs || [];
 
   const [editingMenu, setEditingMenu] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formBuilder, setFormBuilder] = useState(null);
-
-  // const uid = () =>
-  // (window.crypto?.randomUUID?.()) ||
-  // 'xxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-  //   const r = (Math.random() * 16) | 0;
-  //   const v = c === "x" ? r : (r & 0x3) | 0x8;
-  //   return v.toString(16);
-  // });
-
 
   const initialized = useRef(false);
   const theme = useTheme();
@@ -63,9 +55,8 @@ export default function MenuManagerPage() {
 
   const [deployLoading, setDeployLoading] = useState(false);
   const { execute: deploySchemaApi } = useApi(apiEndpoints.menus.deploySchema, {
-  immediate: false,
-});
-
+    immediate: false,
+  });
 
   /* ---------------- Track Saved Tabs ---------------- */
   const [lastSavedTabs, setLastSavedTabs] = useState([]);
@@ -78,9 +69,10 @@ export default function MenuManagerPage() {
   }, [tabs]);
 
   /* ---------------- Diff Checker ---------------- */
-  const hasChanges = useMemo(() => {
-    return JSON.stringify(lastSavedTabs) !== JSON.stringify(tabs);
-  }, [lastSavedTabs, tabs]);
+  const hasChanges = useMemo(
+    () => JSON.stringify(lastSavedTabs) !== JSON.stringify(tabs),
+    [lastSavedTabs, tabs]
+  );
 
   /* ---------------- Validation ---------------- */
   const [validationError, setValidationError] = useState("");
@@ -90,7 +82,6 @@ export default function MenuManagerPage() {
       for (const m of list) {
         if (m.hasForm && !m.tableName)
           return `Menu "${m.title}" requires tableName`;
-
         if (m.children?.length) {
           const err = validate(m.children);
           if (err) return err;
@@ -98,135 +89,122 @@ export default function MenuManagerPage() {
       }
       return null;
     };
-
     setValidationError(validate(tabs) || "");
   }, [tabs]);
 
   /* ---------------- SAVE ALL ---------------- */
   const handleSaveAll = async () => {
     if (!hasChanges || validationError) return;
-
-    await saveMenuSchema({
-      tabs: JSON.parse(JSON.stringify(tabs)),
-    });
-
+    await saveMenuSchema({ tabs: JSON.parse(JSON.stringify(tabs)) });
     setLastSavedTabs(JSON.parse(JSON.stringify(tabs)));
   };
 
-  /* ---------------- DEPLOY SCHEMA ---------------- */
+  /* ---------------- DEPLOY ---------------- */
   const handleDeploySchema = async () => {
-  if (hasChanges) {
-    return Swal.fire({
+    if (hasChanges)
+      return Swal.fire("Unsaved Changes", "Please save first", "warning");
+
+    if (validationError)
+      return Swal.fire("Validation Error", validationError, "error");
+
+    const confirm = await Swal.fire({
+      title: "Deploy Schema?",
       icon: "warning",
-      title: "Unsaved Changes",
-      text: "Please save changes before deploying.",
+      showCancelButton: true,
     });
-  }
 
-  if (validationError) {
-    return Swal.fire({
-      icon: "error",
-      title: "Validation Error",
-      text: validationError,
-    });
-  }
+    if (!confirm.isConfirmed) return;
 
-  const confirm = await Swal.fire({
-    title: "Deploy Schema?",
-    text: "This will generate backend tables using the schema.",
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonText: "Yes, Deploy",
-    cancelButtonText: "Cancel",
-  });
+    setDeployLoading(true);
+    try {
+      await deploySchemaApi({ tenantId, data: tabs });
+      Swal.fire("Success", "Schema deployed", "success");
+    } catch (e) {
+      Swal.fire("Error", e.message || "Failed", "error");
+    } finally {
+      setDeployLoading(false);
+    }
+  };
 
-  if (!confirm.isConfirmed) return;
-
-  setDeployLoading(true);
-
-  try {
-    const response = await deploySchemaApi({
-      tenantId,
-      data: tabs,
-    });
-// console.log("Deploy API Response:", response);
-    
-      Swal.fire({
-        icon: "success",
-        title: "Deployment Successful",
-        text: "Tenant schema deployed successfully. It may take a few moments for backend tables to be created.",
-      });
-    
-  } catch (err) {
-    Swal.fire({
-      icon: "error",
-      title: "API Error",
-      text: err.message || "Something went wrong",
-    });
-  } finally {
-    setDeployLoading(false);
-  }
-};
-
-  /* ---------------- CRUD: UPsert Menu ---------------- */
+  /* ---------------- UPSERT MENU (FINAL FIX) ---------------- */
   const upsertMenu = (menu) => {
     setMenus((prev) => {
-      const cloned = JSON.parse(JSON.stringify(prev.tabs || []));
+      let updated = false;
 
-      function apply(list) {
-        const idx = list.findIndex((x) => x.id === menu.id);
+      const updateTree = (list) =>
+        list.map((item) => {
+          if (item.id === menu.id) {
+            updated = true;
+            return {
+              ...item,
+              ...menu,
+              children: item.children || [],
+            };
+          }
 
-        if (idx !== -1) {
-          list[idx] = menu;
-          return list;
-        }
+          if (item.children?.length) {
+            return {
+              ...item,
+              children: updateTree(item.children),
+            };
+          }
 
-        if (!menu.parentId) {
-          menu.order = list.length + 1;
-          list.push(menu);
-          return list;
-        }
+          return item;
+        });
 
-        return list.map((item) => ({
-          ...item,
-          children:
-            item.id === menu.parentId
-              ? [
+      let newTabs = updateTree(prev.tabs || []);
+
+      if (!updated && !menu.parentId) {
+        newTabs = [
+          ...newTabs,
+          { ...menu, children: [], order: newTabs.length + 1 },
+        ];
+      }
+
+      if (!updated && menu.parentId) {
+        newTabs = newTabs.map((item) =>
+          item.id === menu.parentId
+            ? {
+                ...item,
+                children: [
                   ...(item.children || []),
                   {
                     ...menu,
+                    children: [],
                     order: (item.children?.length || 0) + 1,
                   },
-                ]
-              : apply(item.children || []),
-        }));
+                ],
+              }
+            : item
+        );
       }
 
-      return { ...prev, tabs: apply(cloned) };
+      return { ...prev, tabs: newTabs };
     });
   };
 
-  /* ---------------- DELETE MENU ---------------- */
+  /* ---------------- DELETE ---------------- */
   const deleteMenu = (id) => {
     setMenus((prev) => {
-      function remove(list) {
-        return list
+      const remove = (list) =>
+        list
           .filter((x) => x.id !== id)
           .map((m) => ({ ...m, children: remove(m.children || []) }));
-      }
-
       return { ...prev, tabs: remove(prev.tabs || []) };
     });
   };
 
   /* ---------------- SAVE MENU ---------------- */
   const saveMenu = () => {
-    let menu = { ...editingMenu };
+    const menu = JSON.parse(JSON.stringify(editingMenu)); // 🔒 clone
 
-    if (menu.hasForm) {
+    if (menu.hasForm && !menu.tableName) {
       menu.tableName = `${slugify(menu.title)}_${Date.now()}`;
-    } else {
+    }
+
+    if (!menu.hasForm) {
       menu.tableName = "";
+      menu.formSchema = [];
     }
 
     upsertMenu(menu);
@@ -234,24 +212,17 @@ export default function MenuManagerPage() {
     setEditingMenu(null);
   };
 
-  /* ---------------- SAVE FORM SCHEMA ---------------- */
+  /* ---------------- SAVE FORM ---------------- */
   const saveFormSchema = (menuId, schema) => {
     setMenus((prev) => {
-      function update(list) {
-        return list.map((m) => {
-          if (m.id === menuId) {
-            const updated = { ...m, formSchema: schema };
-            if (updated.hasForm && !updated.tableName)
-              updated.tableName = `${slugify(updated.title)}_${Date.now()}`;
-            return updated;
-          }
-          return { ...m, children: update(m.children || []) };
-        });
-      }
-
+      const update = (list) =>
+        list.map((m) =>
+          m.id === menuId
+            ? { ...m, formSchema: schema }
+            : { ...m, children: update(m.children || []) }
+        );
       return { ...prev, tabs: update(prev.tabs) };
     });
-
     setFormBuilder(null);
   };
 
@@ -265,7 +236,7 @@ export default function MenuManagerPage() {
     return null;
   };
 
-  /* ---------------- Render Tree UI ---------------- */
+  /* ---------------- TREE UI ---------------- */
   const renderTree = (list, lvl = 0) =>
     list.map((m) => (
       <div key={m.id} className="ml-4 mb-3">
@@ -275,7 +246,6 @@ export default function MenuManagerPage() {
           </span>
 
           <div className="flex gap-1">
-            {/* Add Submenu */}
             <Button
               size="small"
               startIcon={<Add />}
@@ -307,7 +277,7 @@ export default function MenuManagerPage() {
 
             <IconButton
               onClick={() => {
-                setEditingMenu(m);
+                setEditingMenu(JSON.parse(JSON.stringify(m))); // 🔒 clone
                 setDialogOpen(true);
               }}
             >
@@ -331,7 +301,6 @@ export default function MenuManagerPage() {
         <h2 className="text-2xl font-semibold">Menu Manager</h2>
 
         <div className="flex gap-3">
-          {/* SAVE ALL BUTTON */}
           <Button
             variant="contained"
             color={hasChanges && !validationError ? "success" : "inherit"}
@@ -342,24 +311,21 @@ export default function MenuManagerPage() {
             {hasChanges ? "Save All" : "Saved"}
           </Button>
 
-          {/* DEPLOY BUTTON */}
           <Button
             variant="contained"
-            color="primary"
             startIcon={
               deployLoading ? <CircularProgress size={20} /> : <CloudUpload />
             }
             disabled={hasChanges || !!validationError || deployLoading}
             onClick={handleDeploySchema}
           >
-            {deployLoading ? "Deploying..." : "Deploy Schema"}
+            Deploy Schema
           </Button>
         </div>
       </div>
 
       {validationError && <Alert severity="error">{validationError}</Alert>}
 
-      {/* Root menu add */}
       <Button
         variant="contained"
         startIcon={<Add />}
@@ -381,10 +347,10 @@ export default function MenuManagerPage() {
 
       <div className="mt-5">{renderTree(tabs)}</div>
 
-      {/* Add/Edit Menu Dialog */}
+      {/* MENU DIALOG */}
       <Dialog fullWidth open={dialogOpen} onClose={() => setDialogOpen(false)}>
         <DialogTitle>
-          {editingMenu?.parentId ? "Add Submenu" : "Add Menu"}
+          {findMenu(tabs, editingMenu?.id) ? "Edit Menu" : "Add Menu"}
         </DialogTitle>
 
         <DialogContent>
@@ -422,12 +388,19 @@ export default function MenuManagerPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Form Builder */}
+      {/* FORM BUILDER */}
       {formBuilder && (
+        // <Dialog
+        //   open
+        //   fullScreen={fullScreen}
+        //   fullWidth
+        //   onClose={() => setFormBuilder(null)}
+        // >
         <Dialog
-          open={!!formBuilder}
-          fullScreen={fullScreen}
+          open
           fullWidth
+          maxWidth="md"
+          fullScreen={fullScreen}
           onClose={() => setFormBuilder(null)}
         >
           <DialogTitle>Form Builder</DialogTitle>

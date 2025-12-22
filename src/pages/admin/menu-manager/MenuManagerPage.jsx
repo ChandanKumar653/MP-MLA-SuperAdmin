@@ -25,10 +25,10 @@ import {
 } from "@mui/icons-material";
 
 import Swal from "sweetalert2";
-import { MenuContext } from "../../context/MenuContext";
+import { MenuContext } from "../../../context/MenuContext";
 import FormBuilderPage from "./FormBuilderPage";
-import useApi from "../../context/useApi";
-import { apiEndpoints } from "../../api/endpoints";
+import useApi from "../../../context/useApi";
+import { apiEndpoints } from "../../../api/endpoints";
 import { v4 as uuidv4 } from "uuid";
 
 /* ---------------- Utilities ---------------- */

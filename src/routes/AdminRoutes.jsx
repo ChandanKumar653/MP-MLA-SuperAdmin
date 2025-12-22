@@ -1,8 +1,9 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "../layouts/Layout";
 import DashboardPage from "../pages/superadmin/dashboard/Dashboard";
-import MenuManagerPage from "../pages/superadmin/MenuManagerPage";
-import FormViewerPage from "../pages/superadmin/FormViewerPage";
+
+import MenuManagerPage from "../pages/admin/menu-manager/MenuManagerPage";
+import FormViewerPage from "../pages/admin/menu-manager/FormViewerPage"
 import TableViewerPage from "../components/common/TableViewerPage";
 import NotFoundPage from "../pages/NotFoundPage";
 

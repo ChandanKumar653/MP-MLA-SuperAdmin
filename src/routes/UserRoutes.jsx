@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "../layouts/Layout";
 import ProtectedRoute from "../components/common/ProtectedRoute";
 import { MenuContext } from "../context/MenuContext";
-import FormViewerPage from "../pages/superadmin/FormViewerPage";
+import FormViewerPage from "../pages/admin/menu-manager/FormViewerPage";
 import UserDashboardPage from "../pages/user/UserDashboardPage";
 export default function UserRoutes() {
   const userMenus = [];

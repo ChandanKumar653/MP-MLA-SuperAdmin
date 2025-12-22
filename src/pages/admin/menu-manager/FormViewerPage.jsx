@@ -35,7 +35,6 @@ const normalizeField = (f) => {
 
   const name =
     f.name ||
-    f.id ||
     (f.label
       ? f.label.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_")
       : "");
@@ -47,6 +46,7 @@ const normalizeField = (f) => {
     type,
     required: !!f.required,
     options: Array.isArray(f.options) ? f.options : [],
+    validations: f.validations || {},
     dependsOn: f.dependsOn
       ? { field: f.dependsOn.field || "", value: f.dependsOn.value }
       : null,
@@ -103,45 +103,82 @@ const FormViewerPage = () => {
     return d;
   }, [fields]);
 
-  /* ---------------- VALIDATION ---------------- */
+  /* ---------------- VALIDATION (DYNAMIC) ---------------- */
   const validationSchema = useMemo(() => {
     const shape = {};
 
     fields.forEach((f) => {
+      const v = f.validations || {};
       let rule;
 
+      /* ---------- STRING TYPES ---------- */
       if (["text", "email", "date"].includes(f.type)) {
         rule = Yup.string();
-        if (f.required) rule = rule.required(`${f.label} is required`);
+
+        if (v.minLength)
+          rule = rule.min(v.minLength, `${f.label} is too short`);
+
+        if (v.maxLength)
+          rule = rule.max(v.maxLength, `${f.label} is too long`);
+
+        if (v.pattern) {
+          try {
+            const regex = new RegExp(v.pattern);
+            rule = rule.matches(regex, `${f.label} format is invalid`);
+          } catch {
+            // invalid regex → ignore safely
+          }
+        }
+
+        if (f.required)
+          rule = rule.required(`${f.label} is required`);
+
         shape[f.name] = rule;
         return;
       }
 
+      /* ---------- NUMBER ---------- */
       if (f.type === "number") {
         rule = Yup.number().typeError("Must be a number");
-        if (f.required) rule = rule.required(`${f.label} is required`);
+
+        if (v.min !== undefined)
+          rule = rule.min(v.min, `${f.label} is too small`);
+
+        if (v.max !== undefined)
+          rule = rule.max(v.max, `${f.label} is too large`);
+
+        if (f.required)
+          rule = rule.required(`${f.label} is required`);
+
         shape[f.name] = rule;
         return;
       }
 
+      /* ---------- CHECKBOX GROUP ---------- */
       if (f.type === "checkbox-group") {
         rule = Yup.array().of(Yup.string());
-        if (f.required) {
+
+        if (f.required)
           rule = rule.min(1, `Select at least one ${f.label}`);
-        }
+
         shape[f.name] = rule;
         return;
       }
 
+      /* ---------- FILE ---------- */
       if (f.type === "file") {
         rule = Yup.mixed();
-        if (f.required) rule = rule.required(`${f.label} is required`);
+        if (f.required)
+          rule = rule.required(`${f.label} is required`);
+
         shape[f.name] = rule;
         return;
       }
 
+      /* ---------- DEFAULT ---------- */
       rule = Yup.mixed();
-      if (f.required) rule = rule.required(`${f.label} is required`);
+      if (f.required)
+        rule = rule.required(`${f.label} is required`);
       shape[f.name] = rule;
     });
 
@@ -156,7 +193,7 @@ const FormViewerPage = () => {
   } = useForm({
     resolver: yupResolver(validationSchema),
     defaultValues,
-    shouldUnregister: false, // 🔥 CRITICAL FIX
+    shouldUnregister: false, // 🔥 keep hidden fields
   });
 
   const values = useWatch({ control });
@@ -176,8 +213,6 @@ const FormViewerPage = () => {
 
   /* ---------------- SUBMIT ---------------- */
   const onSubmit = async (data) => {
-    console.log("FINAL PAYLOAD 👉", data); // Debug once
-
     try {
       await submitFormApi({
         tenantId,
@@ -186,10 +221,10 @@ const FormViewerPage = () => {
         data,
       });
 
+      toast.success("Form submitted successfully");
       setSubmitSuccess(true);
-       toast.success("Form submitted successfully");
       reset(defaultValues);
-      setTimeout(() => setSubmitSuccess(false), 2500);
+      setTimeout(() => setSubmitSuccess(false), 2000);
     } catch (err) {
       console.error("Submit failed:", err);
     }
@@ -203,21 +238,12 @@ const FormViewerPage = () => {
   return (
     <Box maxWidth="md" mx="auto" mt={4} mb={6}>
       <Paper sx={{ p: 4 }}>
-        <Box mb={3}>
-          <Typography variant="h6" fontWeight={600}>
-            {menuObj.title}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Please fill in the required information
-          </Typography>
-        </Box>
-
-        {submitSuccess && (
-          <Alert severity="success" sx={{ mb: 3 }}>
-            Form submitted successfully
-          </Alert>
-         
-        )}
+        <Typography variant="h6" fontWeight={600} mb={1}>
+          {menuObj.title}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" mb={3}>
+          Please fill in the required information
+        </Typography>
 
         <form onSubmit={handleSubmit(onSubmit)}>
           <Stack spacing={2.5}>
@@ -230,7 +256,7 @@ const FormViewerPage = () => {
                   <Typography variant="body2" fontWeight={500} mb={0.5}>
                     {field.label}
                     {field.required && (
-                      <Typography component="span" color="error" fontWeight={600}>
+                      <Typography component="span" color="error">
                         {" "}*
                       </Typography>
                     )}
@@ -320,12 +346,12 @@ const FormViewerPage = () => {
                     />
                   )}
 
-                  {/* CHECKBOX GROUP (🔥 FIXED) */}
+                  {/* CHECKBOX GROUP */}
                   {field.type === "checkbox-group" && (
                     <Controller
                       name={field.name}
                       control={control}
-                      defaultValue={[]} // 🔥 REQUIRED
+                      defaultValue={[]}
                       render={({ field: ctrl }) => (
                         <>
                           <FormGroup>

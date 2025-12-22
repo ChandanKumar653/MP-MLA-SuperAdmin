@@ -12,6 +12,11 @@ import {
   Switch,
   FormControlLabel,
   Divider,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
   Chip,
   Stack,
 } from "@mui/material";
@@ -27,6 +32,7 @@ const slugify = (str) =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
+/* ---------------- FIELD TEMPLATE ---------------- */
 const emptyField = () => ({
   id: uuidv4(),
   label: "",
@@ -34,7 +40,8 @@ const emptyField = () => ({
   required: false,
   options: [],
   optionInput: "",
-  dependsOn: null,
+  validations: {},     // ✅ ALWAYS PRESENT
+  dependsOn: null,     // ✅ ALWAYS PRESENT
 });
 
 /* ---------------- main ---------------- */
@@ -42,21 +49,32 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
   const [fields, setFields] = useState([]);
   const [current, setCurrent] = useState(emptyField());
   const [editingId, setEditingId] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
 
-  /* Load existing */
+  /* ---------------- LOAD EXISTING ---------------- */
   useEffect(() => {
-    if (Array.isArray(existingForm)) {
-      setFields(
-        existingForm.map((f) => ({
-          ...f,
-          id: uuidv4(),
-          optionInput: "",
-        }))
-      );
-    }
+    if (!Array.isArray(existingForm)) return;
+
+    setFields(
+      existingForm.map((f) => ({
+        id: uuidv4(),
+        label: f.label,
+        type:
+          f.type === "integer"
+            ? "number"
+            : f.type === "string"
+            ? "text"
+            : f.type,
+        required: !!f.required,
+        options: f.options || [],
+        optionInput: "",
+        validations: f.validations || {},
+        dependsOn: f.dependsOn || null,
+      }))
+    );
   }, [existingForm]);
 
-  /* Dependency parents (exact allowed types) */
+  /* ---------------- DEPENDENCY PARENTS ---------------- */
   const dependencyParents = useMemo(
     () =>
       fields.filter(
@@ -67,25 +85,23 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
     [fields, editingId]
   );
 
-  /* Drag reorder */
+  /* ---------------- DRAG ---------------- */
   const onDragEnd = (result) => {
     if (!result.destination) return;
-    const items = Array.from(fields);
+    const items = [...fields];
     const [moved] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, moved);
     setFields(items);
   };
 
-  /* Save field */
+  /* ---------------- SAVE FIELD ---------------- */
   const saveField = () => {
     if (!current.label.trim()) return;
 
     if (editingId) {
-      setFields((prev) =>
-        prev.map((f) => (f.id === editingId ? current : f))
-      );
+      setFields((p) => p.map((f) => (f.id === editingId ? current : f)));
     } else {
-      setFields((prev) => [...prev, current]);
+      setFields((p) => [...p, current]);
     }
 
     setCurrent(emptyField());
@@ -93,15 +109,15 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
   };
 
   const editField = (field) => {
-    setCurrent(field);
+    setCurrent({ ...field });
     setEditingId(field.id);
   };
 
   const deleteField = (id) => {
-    setFields((prev) => prev.filter((f) => f.id !== id));
+    setFields((p) => p.filter((f) => f.id !== id));
   };
 
-  /* Options */
+  /* ---------------- OPTIONS ---------------- */
   const addOption = () => {
     if (!current.optionInput.trim()) return;
     setCurrent((p) => ({
@@ -118,22 +134,23 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
     }));
   };
 
-  /* Save schema (STRICT TYPES) */
+  /* ---------------- SAVE FORM ---------------- */
   const saveForm = () => {
     const schema = fields.map((f) => ({
       name: slugify(f.label),
       label: f.label,
-      type: f.type, // 🔒 EXACT TYPE
+      type:
+        f.type === "number"
+          ? "integer"
+          : f.type === "text"
+          ? "string"
+          : f.type,
       required: f.required,
       options: f.options,
-      dependsOn: f.dependsOn
-        ? {
-            field: slugify(
-              fields.find((x) => x.id === f.dependsOn.field)?.label
-            ),
-            value: f.dependsOn.value,
-          }
-        : null,
+      validations: Object.keys(f.validations).length
+        ? f.validations
+        : undefined,
+      dependsOn: f.dependsOn || undefined,
     }));
 
     onSave(schema);
@@ -173,7 +190,6 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
                 )
                   ? current.options
                   : [],
-                dependsOn: null,
               })
             }
           >
@@ -185,10 +201,10 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
             <MenuItem value="radio">Radio</MenuItem>
             <MenuItem value="checkbox">Checkbox</MenuItem>
             <MenuItem value="checkbox-group">Checkbox Group</MenuItem>
-            <MenuItem value="file">File Upload</MenuItem>
           </Select>
 
           <FormControlLabel
+            sx={{ mt: 1 }}
             control={
               <Switch
                 checked={current.required}
@@ -213,10 +229,7 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
                   fullWidth
                   value={current.optionInput}
                   onChange={(e) =>
-                    setCurrent({
-                      ...current,
-                      optionInput: e.target.value,
-                    })
+                    setCurrent({ ...current, optionInput: e.target.value })
                   }
                 />
                 <Button onClick={addOption}>Add</Button>
@@ -234,7 +247,101 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
             </>
           )}
 
-          {/* CONDITIONAL VISIBILITY */}
+          {/* 🔥 VALIDATIONS */}
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2">Validations</Typography>
+
+          {["text", "email"].includes(current.type) && (
+            <>
+              <Stack direction="row" gap={1} mt={1}>
+                <TextField
+                  size="small"
+                  label="Min Length"
+                  type="number"
+                  value={current.validations.minLength || ""}
+                  onChange={(e) =>
+                    setCurrent({
+                      ...current,
+                      validations: {
+                        ...current.validations,
+                        minLength: Number(e.target.value) || undefined,
+                      },
+                    })
+                  }
+                />
+                <TextField
+                  size="small"
+                  label="Max Length"
+                  type="number"
+                  value={current.validations.maxLength || ""}
+                  onChange={(e) =>
+                    setCurrent({
+                      ...current,
+                      validations: {
+                        ...current.validations,
+                        maxLength: Number(e.target.value) || undefined,
+                      },
+                    })
+                  }
+                />
+              </Stack>
+
+              <TextField
+                size="small"
+                label="Custom Regex"
+                fullWidth
+                margin="dense"
+                placeholder="^[A-Za-z ]+$"
+                value={current.validations.pattern || ""}
+                onChange={(e) =>
+                  setCurrent({
+                    ...current,
+                    validations: {
+                      ...current.validations,
+                      pattern: e.target.value || undefined,
+                    },
+                  })
+                }
+              />
+            </>
+          )}
+
+          {current.type === "number" && (
+            <Stack direction="row" gap={1} mt={1}>
+              <TextField
+                size="small"
+                label="Min"
+                type="number"
+                value={current.validations.min || ""}
+                onChange={(e) =>
+                  setCurrent({
+                    ...current,
+                    validations: {
+                      ...current.validations,
+                      min: Number(e.target.value) || undefined,
+                    },
+                  })
+                }
+              />
+              <TextField
+                size="small"
+                label="Max"
+                type="number"
+                value={current.validations.max || ""}
+                onChange={(e) =>
+                  setCurrent({
+                    ...current,
+                    validations: {
+                      ...current.validations,
+                      max: Number(e.target.value) || undefined,
+                    },
+                  })
+                }
+              />
+            </Stack>
+          )}
+
+          {/* 🔥 CONDITIONAL VISIBILITY */}
           {dependencyParents.length > 0 && (
             <>
               <Divider sx={{ my: 2 }} />
@@ -259,7 +366,7 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
               >
                 <MenuItem value="">Always visible</MenuItem>
                 {dependencyParents.map((f) => (
-                  <MenuItem key={f.id} value={f.id}>
+                  <MenuItem key={f.id} value={slugify(f.label)}>
                     Show when "{f.label}" is
                   </MenuItem>
                 ))}
@@ -282,7 +389,9 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
                   }
                 >
                   {dependencyParents
-                    .find((f) => f.id === current.dependsOn.field)
+                    .find(
+                      (f) => slugify(f.label) === current.dependsOn.field
+                    )
                     ?.options?.map((opt) => (
                       <MenuItem key={opt} value={opt}>
                         {opt}
@@ -294,10 +403,11 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
           )}
 
           <Button
-            fullWidth
-            variant="contained"
             sx={{ mt: 3 }}
+            variant="contained"
+            fullWidth
             onClick={saveField}
+            disabled={!current.label}
           >
             {editingId ? "Update Field" : "Add Field"}
           </Button>
@@ -307,69 +417,101 @@ export default function FormBuilderPage({ existingForm = [], onSave }) {
       {/* ================= RIGHT ================= */}
       <Card>
         <CardContent>
-          <Typography variant="h6">Form Fields</Typography>
+          <Box display="flex" justifyContent="space-between">
+            <Typography variant="h6">Form Fields</Typography>
+            <Button size="small" onClick={() => setShowPreview((p) => !p)}>
+              {showPreview ? "Hide Preview" : "Preview"}
+            </Button>
+          </Box>
+
           <Divider sx={{ my: 1 }} />
 
-          <DragDropContext onDragEnd={onDragEnd}>
-            <Droppable droppableId="fields">
-              {(p) => (
-                <Box ref={p.innerRef} {...p.droppableProps}>
-                  {fields.map((f, i) => (
-                    <Draggable key={f.id} draggableId={f.id} index={i}>
-                      {(d) => (
-                        <Box
-                          ref={d.innerRef}
-                          {...d.draggableProps}
-                          {...d.dragHandleProps}
-                          display="flex"
-                          justifyContent="space-between"
-                          alignItems="center"
-                          p={1}
-                          mb={1}
-                          border="1px solid #e0e0e0"
-                          borderRadius={1}
-                        >
-                          <Stack direction="row" gap={1}>
-                            <DragIndicator fontSize="small" />
-                            <Typography>
-                              {f.label}
-                              {f.dependsOn && (
-                                <Typography
-                                  component="span"
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  {" "}
-                                  (conditional)
-                                </Typography>
-                              )}
-                            </Typography>
-                          </Stack>
+          {!showPreview && (
+            <DragDropContext onDragEnd={onDragEnd}>
+              <Droppable droppableId="fields">
+                {(p) => (
+                  <Box ref={p.innerRef} {...p.droppableProps}>
+                    {fields.map((f, i) => (
+                      <Draggable key={f.id} draggableId={f.id} index={i}>
+                        {(d) => (
+                          <Box
+                            ref={d.innerRef}
+                            {...d.draggableProps}
+                            {...d.dragHandleProps}
+                            display="flex"
+                            justifyContent="space-between"
+                            alignItems="center"
+                            p={1}
+                            mb={1}
+                            border="1px solid #ddd"
+                            borderRadius={1}
+                          >
+                            <Box display="flex" gap={1}>
+                              <DragIndicator fontSize="small" />
+                              <Typography>
+                                {f.label}
+                                {f.dependsOn && (
+                                  <Typography
+                                    component="span"
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
+                                    {" "} (conditional)
+                                  </Typography>
+                                )}
+                              </Typography>
+                            </Box>
 
-                          <Box>
-                            <IconButton onClick={() => editField(f)}>
-                              <Edit fontSize="small" />
-                            </IconButton>
-                            <IconButton onClick={() => deleteField(f.id)}>
-                              <Delete fontSize="small" />
-                            </IconButton>
+                            <Box>
+                              <IconButton onClick={() => editField(f)}>
+                                <Edit fontSize="small" />
+                              </IconButton>
+                              <IconButton onClick={() => deleteField(f.id)}>
+                                <Delete fontSize="small" />
+                              </IconButton>
+                            </Box>
                           </Box>
-                        </Box>
-                      )}
-                    </Draggable>
-                  ))}
-                  {p.placeholder}
-                </Box>
-              )}
-            </Droppable>
-          </DragDropContext>
+                        )}
+                      </Draggable>
+                    ))}
+                    {p.placeholder}
+                  </Box>
+                )}
+              </Droppable>
+            </DragDropContext>
+          )}
+
+          {showPreview && (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Column</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Required</TableCell>
+                  <TableCell>Options</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {fields.map((f) => (
+                  <TableRow key={f.id}>
+                    <TableCell>{slugify(f.label)}</TableCell>
+                    <TableCell>{f.type}</TableCell>
+                    <TableCell>{f.required ? "Yes" : "No"}</TableCell>
+                    <TableCell>
+                      {f.options.length ? f.options.join(", ") : "-"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
 
           <Divider sx={{ my: 2 }} />
 
           <Button
-            fullWidth
             variant="contained"
             color="success"
+            fullWidth
             disabled={!fields.length}
             onClick={saveForm}
           >

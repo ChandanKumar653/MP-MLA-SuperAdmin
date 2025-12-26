@@ -1,5 +1,10 @@
 // src/components/common/TableViewerPage.jsx
-import React, { useEffect, useState, useContext, useMemo } from "react";
+import React, {
+  useEffect,
+  useState,
+  useContext,
+  useMemo,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Button,
@@ -12,6 +17,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Paper,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -22,7 +28,7 @@ import {
 import useApi from "../../context/useApi";
 import { apiEndpoints } from "../../api/endpoints";
 import { MenuContext } from "../../context/MenuContext";
-import DynamicTable from "./DynamicTable"; // DataGrid-based
+import DynamicTable from "./DynamicTable";
 import EditFormDialog from "./EditFormDialog";
 
 const TableViewerPage = ({ menu }) => {
@@ -30,8 +36,8 @@ const TableViewerPage = ({ menu }) => {
   const tenantId = menus?.tenantId;
 
   const { id, title, hasForm, formSchema } = menu || {};
-
   const navigate = useNavigate();
+
   const { execute: fetchData } = useApi(
     apiEndpoints.submitForm.allData,
     { immediate: false }
@@ -60,7 +66,7 @@ const TableViewerPage = ({ menu }) => {
         const dataArray = response?.data || [];
 
         const tableRows = dataArray.map((row, index) => ({
-          id: row.id ?? row.pk ?? index, // REQUIRED for DataGrid
+          id: row.id ?? row.pk ?? index,
           ...row,
           createdAt: row.createdAt
             ? new Date(row.createdAt).toLocaleString()
@@ -112,7 +118,7 @@ const TableViewerPage = ({ menu }) => {
   };
 
   /* =======================
-     COLUMNS (DataGrid)
+     COLUMNS
   ======================= */
   const columns = useMemo(() => {
     const dynamicCols =
@@ -166,7 +172,7 @@ const TableViewerPage = ({ menu }) => {
      UI
   ======================= */
   return (
-    <>
+    <Paper sx={{ p: 3, width: "100%", minWidth: 0 }}>
       {/* HEADER */}
       <Box display="flex" justifyContent="space-between" mb={2}>
         <Typography variant="h6">{title}</Typography>
@@ -186,17 +192,20 @@ const TableViewerPage = ({ menu }) => {
       </Box>
 
       {/* TABLE */}
-      <DynamicTable
-        title={title}
-        columns={columns}
-        rows={rows}
-        isLoading={loading}
-      />
+      <Box sx={{ width: "100%" }}>
+        <DynamicTable
+          title={title}
+          columns={columns}
+          rows={rows}
+          isLoading={loading}
+        />
+      </Box>
 
       {/* EDIT DIALOG */}
       {currentRow && (
         <EditFormDialog
           open={editOpen}
+          keepMounted
           onClose={() => setEditOpen(false)}
           formSchema={formSchema}
           rowData={currentRow}
@@ -207,6 +216,7 @@ const TableViewerPage = ({ menu }) => {
       {/* DELETE CONFIRMATION */}
       <Dialog
         open={deleteOpen}
+        keepMounted
         onClose={() => setDeleteOpen(false)}
         maxWidth="xs"
         fullWidth
@@ -224,12 +234,16 @@ const TableViewerPage = ({ menu }) => {
             Cancel
           </Button>
 
-          <Button variant="contained" color="error" onClick={confirmDelete}>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={confirmDelete}
+          >
             Delete
           </Button>
         </DialogActions>
       </Dialog>
-    </>
+    </Paper>
   );
 };
 

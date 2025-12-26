@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "../layouts/Layout";
-import DashboardPage from "../pages/superadmin/dashboard/Dashboard";
+import DashboardPage from "../pages/superadmin/dashboard/Dashboard";    
 
 import MenuManagerPage from "../pages/admin/menu-manager/MenuManagerPage";
 import FormViewerPage from "../pages/admin/menu-manager/FormViewerPage"
@@ -10,6 +10,7 @@ import NotFoundPage from "../pages/NotFoundPage";
 import UsersList from "../pages/admin/user-management/UsersList"; 
 import { useContext, useMemo } from "react";
 import { MenuContext } from "../context/MenuContext";
+import Dashboard from "../pages/admin/dashboard/Dashboard";
 
 const AdminRoutes = () => {
   const { menus } = useContext(MenuContext);
@@ -54,6 +55,7 @@ const AdminRoutes = () => {
 
         {/* STATIC ROUTES */}
         <Route path="dashboard" element={<DashboardPage />} />
+        {/* <Route path="dashboard" element={<Dashboard />} /> */}
         <Route path="menus" element={<MenuManagerPage />} />
         <Route path="form-viewer/:menuId" element={<FormViewerPage />} />
 

@@ -6,25 +6,37 @@ import {
   Logout,
   ExpandMore,
   Business,
-  Brightness1,
   Menu as MenuIcon,
   Close as CloseIcon,
   Domain,
   Group,
+  ChevronLeft,
+  ChevronRight,
+  Folder,
+  Description,
 } from "@mui/icons-material";
-import { Divider, Tooltip, IconButton } from "@mui/material";
-
+import {
+  Divider,
+  IconButton,
+  Popper,
+  Paper,
+  ClickAwayListener,
+} from "@mui/material";
 import { AuthContext } from "../context/AuthContext";
 import { MenuContext } from "../context/MenuContext";
 
-const Sidebar = () => {
+const Sidebar = ({ collapsed = false, onToggleCollapse }) => {
   const { user } = useContext(AuthContext);
-  const { menus } = useContext(MenuContext); 
+  const { menus } = useContext(MenuContext);
   const location = useLocation();
   const navigate = useNavigate();
 
   const [openSubmenus, setOpenSubmenus] = useState({});
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  /* Fly-out state */
+  const [hoveredMenu, setHoveredMenu] = useState(null);
+  const [anchorEl, setAnchorEl] = useState(null);
 
   /* SAFE TABS */
   const tabs = useMemo(() => {
@@ -32,30 +44,36 @@ const Sidebar = () => {
     return menus.tabs;
   }, [menus]);
 
-  /* AUTO-OPEN ACTIVE PARENT */
+  /* AUTO-OPEN ACTIVE PARENTS (EXPANDED MODE ONLY) */
   useEffect(() => {
     if (!tabs.length) return;
+    if (collapsed) return; // ❗ skip during collapse animation
 
     const openParents = {};
-
     const scan = (list, parentIds = []) => {
       list.forEach((menu) => {
         const path = `/${user?.role}/${menu.id}`;
-
         if (location.pathname.startsWith(path)) {
           parentIds.forEach((id) => (openParents[id] = true));
-          if (menu.children?.length > 0) openParents[menu.id] = true;
+          if (menu.children?.length) openParents[menu.id] = true;
         }
-
-        if (menu.children?.length > 0) {
+        if (menu.children?.length) {
           scan(menu.children, [...parentIds, menu.id]);
         }
       });
     };
 
     scan(tabs);
-    setOpenSubmenus((prev) => ({ ...prev, ...openParents }));
-  }, [location.pathname, tabs, user?.role]);
+    setOpenSubmenus(openParents);
+  }, [location.pathname, tabs, user?.role]); // ❗ removed `collapsed`
+
+  /* CLOSE FLYOUT IMMEDIATELY ON COLLAPSE */
+  useEffect(() => {
+    if (collapsed) {
+      setHoveredMenu(null);
+      setAnchorEl(null);
+    }
+  }, [collapsed]);
 
   /* HELPERS */
   const toggleSubmenu = (id) => (e) => {
@@ -68,7 +86,27 @@ const Sidebar = () => {
     return location.pathname.startsWith(fullPath);
   };
 
-  /* RECURSIVE MENU RENDERER */
+  const getDynamicIcon = (menu) =>
+    menu.children?.length ? (
+      <Folder fontSize="small" />
+    ) : (
+      <Description fontSize="small" />
+    );
+
+  const openFlyout = (event, menuId) => {
+    if (!collapsed) return;
+    setAnchorEl(event.currentTarget);
+    setHoveredMenu(menuId);
+  };
+
+  const closeFlyout = () => {
+    setAnchorEl(null);
+    setHoveredMenu(null);
+  };
+
+  /* -------------------------------------------------------
+     RECURSIVE MENU RENDERER (UNCHANGED UI)
+  -------------------------------------------------------- */
   const renderMenuTree = (list, level = 0, parentPath = "") => {
     if (!Array.isArray(list)) return null;
 
@@ -76,184 +114,187 @@ const Sidebar = () => {
       const currentPath = `${parentPath}/${menu.id}`;
       const fullPath = `/${user?.role}${currentPath}`;
       const hasChildren = menu.children?.length > 0;
-      const isOpen = openSubmenus[menu.id] || false;
+      const isOpen = openSubmenus[menu.id];
       const active = isActive(menu.id, parentPath);
 
       return (
         <div key={menu.id} className="flex flex-col w-full">
           <div
-            className={`w-full transition-all duration-200 ${
-              active
-                ? "bg-gradient-to-r from-[#c63bff1a] to-[#e34bff1a] shadow-sm"
-                : "hover:bg-[#faf5ff]"
-            } rounded-xl`}
+            onMouseEnter={(e) =>
+              collapsed && hasChildren && openFlyout(e, menu.id)
+            }
           >
             <div
-              onClick={() => {
-                if (hasChildren) toggleSubmenu(menu.id)();
-                else {
-                  navigate(fullPath);
-                  setMobileOpen(false);
-                }
-              }}
-              className={`flex items-center justify-between px-4 py-3 cursor-pointer text-left transition-all duration-300 ${
-                active ? "text-[#c63bff] font-medium" : "text-[#c63bff]"
+              className={`rounded-xl ${
+                active
+                  ? "bg-gradient-to-r from-[#c63bff1a] to-[#e34bff1a]"
+                  : "hover:bg-[#faf5ff]"
               }`}
-              style={{ paddingLeft: `${16 * (level + 1)}px` }}
             >
-              <div className="flex items-center gap-3 overflow-hidden">
-                {menu.hasForm && (
-                  <Brightness1 style={{ fontSize: 8, color: "#c63bff" }} />
+              <div
+                onClick={() => {
+                  if (hasChildren && !collapsed) toggleSubmenu(menu.id)();
+                  else {
+                    navigate(fullPath);
+                    setMobileOpen(false);
+                  }
+                }}
+                className={`flex items-center justify-between cursor-pointer
+                  ${collapsed ? "px-2 py-3 justify-center" : "px-4 py-3"}
+                  text-[#c63bff]`}
+                style={!collapsed ? { paddingLeft: 16 + level * 16 } : undefined}
+              >
+                <div className="flex items-center gap-3 overflow-hidden">
+                  {getDynamicIcon(menu)}
+                  {!collapsed && (
+                    <span className="text-sm truncate">{menu.title}</span>
+                  )}
+                </div>
+
+                {hasChildren && !collapsed && (
+                  <IconButton
+                    size="small"
+                    onClick={toggleSubmenu(menu.id)}
+                    sx={{
+                      color: "#c63bff",
+                      transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                      transition: "transform 0.3s",
+                    }}
+                  >
+                    <ExpandMore fontSize="small" />
+                  </IconButton>
                 )}
-
-                <Tooltip title={menu.title} arrow placement="right">
-                  <span className="text-sm font-medium truncate">{menu.title}</span>
-                </Tooltip>
               </div>
-
-              {hasChildren && (
-                <IconButton
-                  onClick={toggleSubmenu(menu.id)}
-                  size="small"
-                  sx={{
-                    color: "#c63bff",
-                    transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-                    transition: "transform 0.3s",
-                  }}
-                >
-                  <ExpandMore fontSize="small" />
-                </IconButton>
-              )}
             </div>
           </div>
 
-          {hasChildren && isOpen && (
-            <div className="transition-all duration-300">
-              {renderMenuTree(menu.children, level + 1, currentPath)}
-            </div>
+          {/* Fly-out submenu (unchanged UI) */}
+          {collapsed && hasChildren && hoveredMenu === menu.id && (
+            <Popper
+              open
+              anchorEl={anchorEl}
+              placement="right-start"
+              style={{ zIndex: 2000 }}
+            >
+              <ClickAwayListener onClickAway={closeFlyout}>
+                <Paper
+                  onMouseEnter={() => setHoveredMenu(menu.id)}
+                  onMouseLeave={closeFlyout}
+                  className="relative min-w-[260px] rounded-2xl bg-white border border-[#eee]
+                             shadow-[0_18px_40px_-12px_rgba(161,0,255,0.45)]"
+                >
+                  <div className="px-4 py-3 text-xs font-semibold text-[#7b2cbf] border-b">
+                    {menu.title.toUpperCase()}
+                  </div>
+
+                  <div className="py-1 max-h-[320px] overflow-y-auto">
+                    {menu.children.map((child) => (
+                      <button
+                        key={child.id}
+                        onClick={() => {
+                          navigate(`/${user?.role}${currentPath}/${child.id}`);
+                          closeFlyout();
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm
+                                   text-[#5b2b82] hover:bg-[#faf5ff]"
+                      >
+                        {child.title}
+                      </button>
+                    ))}
+                  </div>
+                </Paper>
+              </ClickAwayListener>
+            </Popper>
+          )}
+
+          {hasChildren && isOpen && !collapsed && (
+            <div>{renderMenuTree(menu.children, level + 1, currentPath)}</div>
           )}
         </div>
       );
     });
   };
 
-  /* BASE PATHS */
   const basePath = `/${user?.role}`;
   const isAdmin = user?.role === "admin";
   const isSuperAdmin = user?.role === "superadmin";
 
   return (
     <>
-      {/* Mobile hamburger */}
+      {/* Mobile toggle */}
       <div className="md:hidden fixed top-4 left-4 z-50">
-        <IconButton
-          onClick={() => setMobileOpen(!mobileOpen)}
-          sx={{ color: "#a100ff" }}
-        >
+        <IconButton onClick={() => setMobileOpen(!mobileOpen)}>
           {mobileOpen ? <CloseIcon /> : <MenuIcon />}
         </IconButton>
       </div>
 
       {/* Sidebar */}
       <div
-        className={`fixed md:static z-40 h-screen w-64 bg-white flex flex-col justify-between transition-transform duration-300
-           shadow-[4px_0_15px_-4px_rgba(161,0,255,0.05)]
-           ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+        className={`fixed md:static z-40 h-screen bg-white flex flex-col
+          shadow-[4px_0_15px_-4px_rgba(161,0,255,0.05)]
+          transition-[width,transform] duration-300 ease-out
+          will-change-[width,transform]
+          ${collapsed ? "md:w-20" : "md:w-64"}
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
       >
+        {/* Collapse button */}
+        <div className="hidden md:flex absolute top-1/2 -right-4 -translate-y-1/2 z-50">
+          <button
+            onClick={onToggleCollapse}
+            className="w-10 h-10 rounded-full bg-gradient-to-r from-[#c63bff] to-[#e34bff]
+                       text-white flex items-center justify-center shadow-lg"
+          >
+            {collapsed ? <ChevronRight /> : <ChevronLeft />}
+          </button>
+        </div>
+
         {/* Logo */}
         <div className="px-6 py-5 flex justify-center items-center gap-2 text-[#dc51f4] text-2xl font-bold">
-          <Business /> LOGO
+          <Business />
+          {!collapsed && <span>LOGO</span>}
         </div>
+
         <Divider />
 
-        {/* Menu Content */}
-        <div className="flex-1 overflow-y-auto px-4 pt-6 pb-4 scrollbar-hide">
-
-          {/* Dashboard */}
-          <Link to={`${basePath}/dashboard`} onClick={() => setMobileOpen(false)}>
-            <button
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl w-full text-sm font-medium transition-all duration-300 cursor-pointer ${
-                location.pathname === `${basePath}/dashboard`
-                  ? "bg-gradient-to-r from-[#c63bff1a] to-[#e34bff1a] text-[#c63bff]"
-                  : "text-[#c63bff] hover:bg-[#faf5ff]"
-              }`}
-            >
+        {/* Static Menus */}
+        <div className="flex-1 overflow-y-auto px-2 pt-4 pb-2">
+          <Link to={`${basePath}/dashboard`}>
+            <button className="flex items-center gap-3 rounded-xl w-full px-4 py-3 text-[#c63bff] hover:bg-[#faf5ff] cursor-pointer">
               <Dashboard />
-              <Tooltip title="Dashboard" arrow placement="right">
-                <span className="truncate">Dashboard</span>
-              </Tooltip>
+              {!collapsed && <span>Dashboard</span>}
             </button>
           </Link>
 
-          {/* Menu Manager (Admin only) */}
           {isAdmin && (
-            <Link to={`${basePath}/menus`} onClick={() => setMobileOpen(false)}>
-              <button
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl w-full text-sm font-medium transition-all duration-300 cursor-pointer ${
-                  location.pathname === `${basePath}/menus`
-                    ? "bg-gradient-to-r from-[#c63bff1a] to-[#e34bff1a] text-[#c63bff]"
-                    : "text-[#c63bff] hover:bg-[#faf5ff]"
-                }`}
-              >
+            <Link to={`${basePath}/menus`}>
+              <button className=" cursor-pointer flex items-center gap-3 rounded-xl w-full px-4 py-3 text-[#c63bff] hover:bg-[#faf5ff]">
                 <Business />
-                <Tooltip title="Menu Manager" arrow placement="right">
-                  <span className="truncate">Menu Manager</span>
-                </Tooltip>
+                {!collapsed && <span>Menu Manager</span>}
               </button>
             </Link>
           )}
 
-          {/* Organizations (SuperAdmin only) */}
           {isSuperAdmin && (
-            <Link to={`${basePath}/organizations`} onClick={() => setMobileOpen(false)}>
-              <button
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl w-full text-sm font-medium transition-all duration-300 cursor-pointer ${
-                  location.pathname.includes(`${basePath}/organizations`)
-                    ? "bg-gradient-to-r from-[#c63bff1a] to-[#e34bff1a] text-[#c63bff]"
-                    : "text-[#c63bff] hover:bg-[#faf5ff]"
-                }`}
-              >
+            <Link to={`${basePath}/organizations`}>
+              <button  className="flex items-center gap-3 rounded-xl w-full px-4 py-3 text-[#c63bff] hover:bg-[#faf5ff] cursor-pointer">
                 <Domain />
-                <Tooltip title="Organizations" arrow placement="right">
-                  <span className="truncate">Organizations</span>
-                </Tooltip>
+                {!collapsed && <span>Organizations</span>}
+              </button>
+            </Link>
+          )}
+
+          {isAdmin && (
+            <Link to={`${basePath}/users`}>
+              <button className="flex items-center gap-3 rounded-xl w-full px-4 py-3 text-[#c63bff] hover:bg-[#faf5ff] cursor-pointer">
+                <Group />
+                {!collapsed && <span>User Management</span>}
               </button>
             </Link>
           )}
 
           <Divider className="my-4" />
 
-          {/* User Management (Admin only) */}
-          {isAdmin && (
-            <div className="mb-4">
-              <Link
-                to={`${basePath}/users`}
-                onClick={() => setMobileOpen(false)}
-              >
-                <button
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl w-full text-sm font-medium transition-all duration-300 cursor-pointer ${
-                    location.pathname.includes(`${basePath}/users`)
-                      ? "bg-gradient-to-r from-[#c63bff1a] to-[#e34bff1a] text-[#c63bff]"
-                      : "text-[#c63bff] hover:bg-[#faf5ff]"
-                  }`}
-                >
-                  <Group />
-                  <Tooltip title="User Management" arrow placement="right">
-                    <span className="truncate">User Management</span>
-                  </Tooltip>
-                </button>
-              </Link>
-            </div>
-          )}
-
-          {/* Dynamic Menus */}
-          {tabs.length > 0 ? (
-            renderMenuTree(tabs)
-          ) : (
-            <div className="text-center text-gray-400 text-xs py-8">
-              No menus configured
-            </div>
-          )}
+          {tabs.length ? renderMenuTree(tabs) : null}
         </div>
 
         {/* Logout */}
@@ -263,14 +304,15 @@ const Sidebar = () => {
               localStorage.clear();
               navigate("/login");
             }}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white bg-gradient-to-r from-[#c63bff] to-[#e34bff] hover:opacity-90 transition font-medium"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
+              text-white bg-gradient-to-r from-[#c63bff] to-[#e34bff]"
           >
-            <Logout /> Logout
+            <Logout />
+            {!collapsed && <span>Logout</span>}
           </button>
         </div>
       </div>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-20 z-30 md:hidden"

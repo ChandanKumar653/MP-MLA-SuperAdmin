@@ -31,5 +31,8 @@ export const apiEndpoints = {
   submitForm:{
     submit: (data) => api.post("/admin/data/store", data),
     allData: (data) => api.post("/admin/all",data ),
+  },
+  dashboard:{
+    getStats: (data) => api.post(`/admin/dashboard`,data),
   }
 };

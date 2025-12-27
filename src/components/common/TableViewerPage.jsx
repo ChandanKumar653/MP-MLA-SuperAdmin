@@ -159,53 +159,114 @@ const TableViewerPage = ({ menu }) => {
   /* =======================
      COLUMNS
   ======================= */
+  // const columns = useMemo(() => {
+  //   const dynamicCols =
+  //     formSchema?.map((f) => ({
+  //       field: f.name,
+  //       headerName: f.label,
+  //       flex: 1,
+  //     })) || [];
+
+  //   return [
+  //     ...dynamicCols,
+  //     {
+  //       field: "createdAt",
+  //       headerName: "Created At",
+  //       flex: 1,
+  //     },
+  //     {
+  //       field: "actions",
+  //       headerName: "Actions",
+  //       width: 120,
+  //       sortable: false,
+  //       filterable: false,
+  //       renderCell: (params) => (
+  //         <Box display="flex" gap={1}>
+  //           <Tooltip title="Edit">
+  //             <IconButton
+  //               size="small"
+  //               color="primary"
+  //               onClick={() => handleEdit(params.row)}
+  //             >
+  //               <EditIcon fontSize="small"  />
+  //             </IconButton>
+  //           </Tooltip>
+
+  //           <Tooltip title="Delete">
+  //             <IconButton
+  //               size="small"
+  //               color="error"
+  //               onClick={() => openDeleteDialog(params.row)}
+  //             >
+  //               <DeleteIcon fontSize="small" />
+  //             </IconButton>
+  //           </Tooltip>
+  //         </Box>
+  //       ),
+  //     },
+  //   ];
+  // }, [formSchema]);
+
+
   const columns = useMemo(() => {
-    const dynamicCols =
-      formSchema?.map((f) => ({
-        field: f.name,
-        headerName: f.label,
-        flex: 1,
-      })) || [];
+  // Dynamic columns from schema
+  const dynamicCols =
+    formSchema?.map((f) => ({
+      field: f.name,
+      headerName: f.label,
+      flex: 1,
+    })) || [];
 
-    return [
-      ...dynamicCols,
-      {
-        field: "createdAt",
-        headerName: "Created At",
-        flex: 1,
-      },
-      {
-        field: "actions",
-        headerName: "Actions",
-        width: 120,
-        sortable: false,
-        filterable: false,
-        renderCell: (params) => (
-          <Box display="flex" gap={1}>
-            <Tooltip title="Edit">
-              <IconButton
-                size="small"
-                color="primary"
-                onClick={() => handleEdit(params.row)}
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+  // Permission check
+  const canWrite = role === "user" && access_level === "write";
 
-            <Tooltip title="Delete">
-              <IconButton
-                size="small"
-                color="error"
-                onClick={() => openDeleteDialog(params.row)}
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        ),
-      },
-    ];
-  }, [formSchema]);
+  // Base columns
+  const baseColumns = [
+    ...dynamicCols,
+    {
+      field: "createdAt",
+      headerName: "Created At",
+      flex: 1,
+    },
+  ];
+
+  // Conditionally add Actions column
+  if (canWrite) {
+    baseColumns.push({
+      field: "actions",
+      headerName: "Actions",
+      width: 120,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <Box display="flex" gap={1}>
+          <Tooltip title="Edit">
+            <IconButton
+              size="small"
+              color="primary"
+              onClick={() => handleEdit(params.row)}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title="Delete">
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => openDeleteDialog(params.row)}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      ),
+    });
+  }
+
+  return baseColumns;
+}, [formSchema, role, access_level]);
+
 
   /* =======================
      UI

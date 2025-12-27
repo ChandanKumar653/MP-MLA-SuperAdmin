@@ -499,7 +499,7 @@ export default function UserList() {
                     </Select>
 
                     {getAccess(c.id) !== "none" && (
-                      <Tooltip title="Controls whose data the user can see">
+                      // <Tooltip title="Controls whose data the user can see">
                         <Select
                           size="small"
                           value={getDataScope(c.id)}
@@ -517,7 +517,7 @@ export default function UserList() {
                           <MenuItem value="own">Own Data</MenuItem>
                           <MenuItem value="all">All Data</MenuItem>
                         </Select>
-                      </Tooltip>
+                      // </Tooltip>
                     )}
                   </Box>
                 ))}

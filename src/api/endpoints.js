@@ -35,6 +35,10 @@ export const apiEndpoints = {
     submit: (data) => api.post("/admin/data/store", data),
     allData: (data) => api.post("/admin/all",data ),
     allDataForUser: (data) => api.post("/user/get-all",data ),
+    editDataForUser: (data) => api.put("/user/update",data ),
+    editData: (data) => api.put("/dynamic/update",data ),
+    deleteData: (data) => api.delete("/admin/delete",data ),
+    deleteDataForUser: (data) => api.delete("/user/delete",data ),
   },
   dashboard:{
     getStats: (data) => api.post(`/admin/dashboard`,data),

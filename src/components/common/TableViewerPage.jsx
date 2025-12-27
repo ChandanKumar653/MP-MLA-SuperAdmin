@@ -24,6 +24,7 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
 } from "@mui/icons-material";
+import toast from "react-hot-toast";
 
 import useApi from "../../context/useApi";
 import { apiEndpoints } from "../../api/endpoints";
@@ -32,18 +33,32 @@ import DynamicTable from "./DynamicTable";
 import EditFormDialog from "./EditFormDialog";
 import { AuthContext } from "../../context/AuthContext";
 const TableViewerPage = ({ menu }) => {
-  console.log("Rendering TableViewerPage with menu:", menu);
+  // console.log("Rendering TableViewerPage with menu:", menu);
   const { menus } = useContext(MenuContext);
   // console.log("Menus in TableViewerPage:", menus);
   const{role,userId}=useContext(AuthContext);
   const tenantId = menus?.tenantId;
 
-  const { id, title, hasForm, formSchema ,access_level} = menu || {};
+  const { id, title, hasForm, formSchema ,access_level,tableName} = menu || {};
   const navigate = useNavigate();
 
   const { execute: fetchData } = useApi(
     role==="user"?apiEndpoints.submitForm.allDataForUser:
     apiEndpoints.submitForm.allData,
+    { immediate: false }
+  );
+
+  const {execute:updateData}=useApi(
+    role==="user"?
+    apiEndpoints.submitForm.editDataForUser:
+    apiEndpoints.submitForm.editData,
+    { immediate: false }
+  );
+
+  const {execute:deleteData}=useApi(
+    role==="user"?
+    apiEndpoints.submitForm.deleteDataForUser:
+    apiEndpoints.submitForm.deleteData,
     { immediate: false }
   );
 
@@ -55,6 +70,7 @@ const TableViewerPage = ({ menu }) => {
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [rowToDelete, setRowToDelete] = useState(null);
+  const [refresh, setRefresh] = useState(false);
 
   /* =======================
      LOAD DATA
@@ -110,20 +126,38 @@ const TableViewerPage = ({ menu }) => {
     setDeleteOpen(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!rowToDelete) return;
 
-    setRows((prev) => prev.filter((r) => r.id !== rowToDelete.id));
+    // setRows((prev) => prev.filter((r) => r.id !== rowToDelete.id));
+    try {
+      const body={ tenantId,userId,id,title,tableName }
+      console.log("Delete body:", body);
+      const res= await deleteData(body);
+    }catch (error) {
+      // toast.error(error?.response?.data?.error||error?.response?.data?.message);
+      toast.error("Failed to delete data");
+    }
+    setRefresh(!refresh);
     setDeleteOpen(false);
     setRowToDelete(null);
   };
 
-  const handleSaveEdit = (updatedRow) => {
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === updatedRow.id ? { ...r, ...updatedRow } : r
-      )
-    );
+  const handleSaveEdit =async (updatedRow) => {
+    // setRows((prev) =>
+    //   prev.map((r) =>
+    //     r.id === updatedRow.id ? { ...r, ...updatedRow } : r
+    //   )
+    // );
+    try {
+
+      const res=await updateData({ tenantId,userId,data:updatedRow,id,title });
+     
+      
+    } catch (error) {
+      toast.error(error?.response?.data?.error||error?.response?.data?.message||"Failed to update data");
+    }
+
   };
 
   /* =======================
@@ -188,16 +222,17 @@ const TableViewerPage = ({ menu }) => {
 
         <Box display="flex" gap={1} alignItems="center">
           {loading && <CircularProgress size={20} />}
-   {access_level==="write"?
+   
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAddNewRecord}
-            disabled={!hasForm}
+            // disabled={!hasForm}
+            disabled={!hasForm||(role==="user"&&access_level!=="write")}
           >
             Add
           </Button>
-          :null}
+          
         </Box>
       </Box>
 

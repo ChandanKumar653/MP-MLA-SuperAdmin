@@ -144,11 +144,7 @@ const TableViewerPage = ({ menu }) => {
   };
 
   const handleSaveEdit =async (updatedRow) => {
-    // setRows((prev) =>
-    //   prev.map((r) =>
-    //     r.id === updatedRow.id ? { ...r, ...updatedRow } : r
-    //   )
-    // );
+    
     try {
 
       const res=await updateData({ tenantId,userId,data:updatedRow,id,title });

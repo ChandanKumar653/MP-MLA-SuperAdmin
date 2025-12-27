@@ -30,15 +30,19 @@ import { apiEndpoints } from "../../api/endpoints";
 import { MenuContext } from "../../context/MenuContext";
 import DynamicTable from "./DynamicTable";
 import EditFormDialog from "./EditFormDialog";
-
+import { AuthContext } from "../../context/AuthContext";
 const TableViewerPage = ({ menu }) => {
+  console.log("Rendering TableViewerPage with menu:", menu);
   const { menus } = useContext(MenuContext);
+  // console.log("Menus in TableViewerPage:", menus);
+  const{role,userId}=useContext(AuthContext);
   const tenantId = menus?.tenantId;
 
-  const { id, title, hasForm, formSchema } = menu || {};
+  const { id, title, hasForm, formSchema ,access_level} = menu || {};
   const navigate = useNavigate();
 
   const { execute: fetchData } = useApi(
+    role==="user"?apiEndpoints.submitForm.allDataForUser:
     apiEndpoints.submitForm.allData,
     { immediate: false }
   );
@@ -61,8 +65,13 @@ const TableViewerPage = ({ menu }) => {
     const load = async () => {
       try {
         setLoading(true);
-
-        const response = await fetchData({ tenantId, title });
+        let response;
+        if(role==="user"){
+          response = await fetchData({ tenantId, title,userId });
+        }else{
+          response = await fetchData({ tenantId, title });
+        }
+        // const response = await fetchData({ tenantId, title });
         const dataArray = response?.data || [];
 
         const tableRows = dataArray.map((row, index) => ({
@@ -88,7 +97,7 @@ const TableViewerPage = ({ menu }) => {
      HANDLERS
   ======================= */
   const handleAddNewRecord = () => {
-    navigate(`/admin/form-viewer/${id}`);
+    navigate(`/${role}/form-viewer/${id}`);
   };
 
   const handleEdit = (row) => {
@@ -179,7 +188,7 @@ const TableViewerPage = ({ menu }) => {
 
         <Box display="flex" gap={1} alignItems="center">
           {loading && <CircularProgress size={20} />}
-
+   {access_level==="write"?
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -188,6 +197,7 @@ const TableViewerPage = ({ menu }) => {
           >
             Add
           </Button>
+          :null}
         </Box>
       </Box>
 

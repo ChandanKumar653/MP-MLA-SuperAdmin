@@ -71,43 +71,164 @@ export const MenuProvider = ({ children }) => {
   /* ---------------------------------------
      LOAD MENUS (ONCE PER TENANT)
   ---------------------------------------- */
-  useEffect(() => {
-    if (!menus.tenantId || !decodedUser || fetchedRef.current) return;
+  // useEffect(() => {
+  //   if (!menus.tenantId || !decodedUser || fetchedRef.current) return;
 
-    const loadMenus = async () => {
-      try {
-        fetchedRef.current = true;
+  //   const loadMenus = async () => {
+  //     try {
+  //       fetchedRef.current = true;
+  //       let res;
+  //       if(decodedUser?.role === "user"){
+  //         res = await fetchMenus({tenantId:menus.tenantId, userId:decodedUser.userId});
+  //       }else{
+  //         res = await fetchMenus(menus.tenantId);
+  //       }
+  //       const raw = res?.data?.data;
 
-        const res = await fetchMenus(menus.tenantId);
+  //       let tabs = [];
+
+  //       if (Array.isArray(raw)) {
+  //         tabs = raw?.[0]?.tabs || [];
+  //       } else if (typeof raw === "string") {
+  //         try {
+  //           const parsed = JSON.parse(raw);
+  //           tabs = parsed?.[0]?.tabs || [];
+  //         } catch (err) {
+  //           console.error("Menu JSON parse error:", err);
+  //         }
+  //       }
+
+  //       setMenusState((prev) => ({ ...prev, tabs }));
+  //     } catch (err) {
+  //       fetchedRef.current = false;
+  //       console.error("Failed to load menus:", err);
+  //       toast.error("Failed to load menus");
+  //     }
+  //   };
+
+  //   const decoded = getDecodedToken?.();
+
+  //   if (decoded?.role !== "superadmin") {
+  //     loadMenus();
+  //   }
+  // }, [menus.tenantId, decodedUser, fetchMenus]);
+
+
+//   useEffect(() => {
+//   if (!menus?.tenantId || !decodedUser || fetchedRef.current) return;
+
+//   const loadMenus = async () => {
+//     try {
+//       fetchedRef.current = true;
+
+//       let res;
+//       if (decodedUser.role === "user") {
+//         res = await fetchMenus({
+//           tenantId: menus.tenantId,
+//           userId: decodedUser.userId,
+//         });
+//       } else {
+//         res = await fetchMenus(menus.tenantId);
+//       }
+
+//       const apiData = res?.data?.data;
+//       let tabs = [];
+
+//       /* ---------------- ADMIN ---------------- */
+//       if (decodedUser.role !== "user") {
+//         // admin → data.data is STRINGIFIED JSON
+//         if (typeof apiData?.data === "string") {
+//           try {
+//             const parsed = JSON.parse(apiData.data);
+//             tabs = parsed?.[0]?.tabs || [];
+//           } catch (e) {
+//             console.error("Admin schema parse failed:", e);
+//           }
+//         }
+//       }
+
+//       /* ---------------- USER ---------------- */
+//       else {
+//         // user → data.schema is already ARRAY
+//         if (Array.isArray(apiData?.schema)) {
+//           tabs = apiData.schema?.[0]?.tabs || [];
+//         }
+//       }
+
+//       setMenusState((prev) => ({
+//         ...prev,
+//         tabs, // includes access_level automatically for user
+//       }));
+//     } catch (err) {
+//       fetchedRef.current = false;
+//       console.error("Failed to load menus:", err);
+//       toast.error("Failed to load menus");
+//     }
+//   };
+
+//   loadMenus();
+// }, [menus?.tenantId, decodedUser, fetchMenus]);
+
+
+useEffect(() => {
+  if (!menus?.tenantId || !decodedUser || fetchedRef.current) return;
+
+  const loadMenus = async () => {
+    try {
+      fetchedRef.current = true;
+
+      let res;
+      if (decodedUser.role === "user") {
+        res = await fetchMenus({
+          tenantId: menus.tenantId,
+          userId: decodedUser.userId,
+        });
+      } else {
+        res = await fetchMenus(menus.tenantId);
+      }
+
+      let tabs = [];
+
+      /* ---------------- ADMIN ---------------- */
+      // res.data.data.data → STRINGIFIED JSON
+      if (decodedUser.role !== "user") {
         const raw = res?.data?.data;
-
-        let tabs = [];
-
-        if (Array.isArray(raw)) {
-          tabs = raw?.[0]?.tabs || [];
-        } else if (typeof raw === "string") {
+        if (typeof raw === "string") {
           try {
             const parsed = JSON.parse(raw);
             tabs = parsed?.[0]?.tabs || [];
-          } catch (err) {
-            console.error("Menu JSON parse error:", err);
+          } catch (e) {
+            console.error("Admin schema parse failed", e);
           }
         }
-
-        setMenusState((prev) => ({ ...prev, tabs }));
-      } catch (err) {
-        fetchedRef.current = false;
-        console.error("Failed to load menus:", err);
-        toast.error("Failed to load menus");
       }
-    };
 
-    const decoded = getDecodedToken?.();
+      /* ---------------- USER ---------------- */
+      // res.data.data.schema → ARRAY
+      else {
+        const schema = res?.data?.schema;
+        if (Array.isArray(schema)) {
+          tabs = schema?.[0]?.tabs || [];
+        }
+      }
 
-    if (decoded?.role !== "superadmin") {
-      loadMenus();
+      /* 🔑 SINGLE NORMALIZED OUTPUT */
+      setMenusState((prev) => ({
+        ...prev,
+        tabs,
+      }));
+    } catch (err) {
+      fetchedRef.current = false;
+      console.error("Failed to load menus:", err);
+      toast.error("Failed to load menus");
     }
-  }, [menus.tenantId, decodedUser, fetchMenus]);
+  };
+
+  loadMenus();
+}, [menus?.tenantId, decodedUser]);
+
+
+
 
   /* ---------------------------------------
      SAFE SETTER

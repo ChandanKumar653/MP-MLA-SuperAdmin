@@ -27,7 +27,6 @@ import { AuthContext } from "../../../context/AuthContext";
 import { MenuContext } from "../../../context/MenuContext";
 import useApi from "../../../context/useApi";
 import { apiEndpoints } from "../../../api/endpoints";
-
 /* ---------------- NORMALIZER ---------------- */
 const normalizeField = (f) => {
   const typeMap = { string: "text", integer: "number" };
@@ -57,12 +56,13 @@ const normalizeField = (f) => {
 const FormViewerPage = () => {
   const { menuId } = useParams();
   const navigate = useNavigate();
+  const {role,tenantId,userId} = useContext(AuthContext);
 
   const [fields, setFields] = useState([]);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
   const { getDecodedToken } = useContext(AuthContext);
-  const tenantId = getDecodedToken?.()?.tenantId;
+  // const tenantId = getDecodedToken?.()?.tenantId;
 
   const { menus } = useContext(MenuContext);
 
@@ -84,7 +84,7 @@ const FormViewerPage = () => {
   const tableName = menuObj?.tableName;
 
   const { execute: submitFormApi, loading } = useApi(
-    apiEndpoints.submitForm.submit,
+    role==="admin" ? apiEndpoints.submitForm.submit : apiEndpoints.submitForm.userSubmits,
     { immediate: false }
   );
 
@@ -216,6 +216,7 @@ const FormViewerPage = () => {
     try {
       await submitFormApi({
         tenantId,
+        userId,
         title: menuObj.title,
         tableName,
         data,
@@ -227,6 +228,7 @@ const FormViewerPage = () => {
       setTimeout(() => setSubmitSuccess(false), 2000);
     } catch (err) {
       console.error("Submit failed:", err);
+      toast.error(err?.response?.data?.error ||err?.response?.data?.message|| "Submission failed");
     }
   };
 

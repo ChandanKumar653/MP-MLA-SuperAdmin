@@ -242,7 +242,7 @@ const Sidebar = ({ collapsed = false, onToggleCollapse }) => {
           <button
             onClick={onToggleCollapse}
             className="w-10 h-10 rounded-full bg-gradient-to-r from-[#c63bff] to-[#e34bff]
-                       text-white flex items-center justify-center shadow-lg"
+                       text-white flex items-center justify-center shadow-lg cursor-pointer"
           >
             {collapsed ? <ChevronRight /> : <ChevronLeft />}
           </button>
@@ -305,7 +305,7 @@ const Sidebar = ({ collapsed = false, onToggleCollapse }) => {
               navigate("/login");
             }}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
-              text-white bg-gradient-to-r from-[#c63bff] to-[#e34bff]"
+              text-white bg-gradient-to-r from-[#c63bff] to-[#e34bff] cursor-pointer"
           >
             <Logout />
             {!collapsed && <span>Logout</span>}

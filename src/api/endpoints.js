@@ -5,7 +5,7 @@ export const apiEndpoints = {
     getAll: (id) => api.get(`/admin/user?tenantId=${id}`),
     getById: (id) => api.get(`/users/${id}`),
     create: (data) => api.post("/admin/user", data),
-    update: (id, data) => api.put(`/admin/user/${id}`, data),
+    update: (data) => api.put(`/admin/update-user`, data),
     remove: (id) => api.delete(`/admin/user/${id}`),
   },
   organizations: {
@@ -24,13 +24,17 @@ export const apiEndpoints = {
   },
    menus: {
     getAll: (tenantId) => api.get(`/admin/tenant-schema/${tenantId}`),
-    getAllForUser: (tenantId) => api.get(`/user/tenant-schema/${tenantId}`),
+    // getAllForUser: (tenantId) => api.get(`/user/tenant-schema/${tenantId}`),
+    getAllForUser: (data) => api.post(`/user/schema/accessibl`,data),
     save: (data) => api.post("/admin/tenant-schema", data),
     deploySchema: (data) => api.post(`/admin/tenant-schema/deploy/${data?.tenantId}`, data),
   },
   submitForm:{
+    userSubmits: (data) => api.post("/user/store", data),
+    userGetsById: (data) => api.post("user/get-by-id", data),
     submit: (data) => api.post("/admin/data/store", data),
     allData: (data) => api.post("/admin/all",data ),
+    allDataForUser: (data) => api.post("/user/get-all",data ),
   },
   dashboard:{
     getStats: (data) => api.post(`/admin/dashboard`,data),

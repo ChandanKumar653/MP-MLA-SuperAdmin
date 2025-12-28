@@ -32,11 +32,14 @@ import { MenuContext } from "../../context/MenuContext";
 import DynamicTable from "./DynamicTable";
 import EditFormDialog from "./EditFormDialog";
 import { AuthContext } from "../../context/AuthContext";
+import FormViewerDialog from "../../pages/admin/menu-manager/FormViewerDialog";
 const TableViewerPage = ({ menu }) => {
   // console.log("Rendering TableViewerPage with menu:", menu);
   const { menus } = useContext(MenuContext);
   // console.log("Menus in TableViewerPage:", menus);
   const{role,userId}=useContext(AuthContext);
+  const [addOpen, setAddOpen] = useState(false);
+
   const tenantId = menus?.tenantId;
 
   const { id, title, hasForm, formSchema ,access_level,tableName} = menu || {};
@@ -112,9 +115,14 @@ const TableViewerPage = ({ menu }) => {
   /* =======================
      HANDLERS
   ======================= */
+  // const handleAddNewRecord = () => {
+  //   navigate(`/${role}/form-viewer/${id}`);
+  // };
+
   const handleAddNewRecord = () => {
-    navigate(`/${role}/form-viewer/${id}`);
-  };
+  setAddOpen(true);
+};
+
 
   const handleEdit = (row) => {
     setCurrentRow(row);
@@ -218,7 +226,7 @@ const TableViewerPage = ({ menu }) => {
     })) || [];
 
   // Permission check
-  const canWrite = role === "user" && access_level === "write";
+  const canWrite = role!=="user"||(role === "user" && access_level === "write");
 
   // Base columns
   const baseColumns = [
@@ -345,6 +353,22 @@ const TableViewerPage = ({ menu }) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+
+
+{/* ADD FORM DIALOG */}
+{hasForm && (
+  <FormViewerDialog
+    open={addOpen}
+    tenantId={tenantId}
+    onClose={() => {
+      setAddOpen(false);
+      setRefresh(!refresh); // reload table after submit
+    }}
+    menuObj={menu}
+  />
+)}
+
     </Paper>
   );
 };

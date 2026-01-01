@@ -110,7 +110,7 @@ const TableViewerPage = ({ menu }) => {
     };
 
     load();
-  }, [tenantId, menu, title, fetchData]);
+  }, [tenantId, menu, title, fetchData,refresh]);
 
   /* =======================
      HANDLERS
@@ -139,9 +139,11 @@ const TableViewerPage = ({ menu }) => {
 
     // setRows((prev) => prev.filter((r) => r.id !== rowToDelete.id));
     try {
-      const body={ tenantId,userId,id,title,tableName }
+      const body={ tenantId,userId,id:rowToDelete?.id,title,tableName }
       console.log("Delete body:", body);
       const res= await deleteData(body);
+      toast.success("Data deleted successfully");
+      setRefresh(!refresh);
     }catch (error) {
       // toast.error(error?.response?.data?.error||error?.response?.data?.message);
       toast.error("Failed to delete data");
@@ -154,10 +156,20 @@ const TableViewerPage = ({ menu }) => {
   const handleSaveEdit =async (updatedRow) => {
     
     try {
+      if(!currentRow){
+        return;
+      }
+      console.log("Updated row:", updatedRow);
+      if(updatedRow?.pk){
+        delete updatedRow.pk;
+      }
 
-      const res=await updateData({ tenantId,userId,data:updatedRow,id,title });
-     
-      
+      const res=await updateData({ tenantId,userId,data:updatedRow,id:currentRow?.id,title });
+     toast.success("Data updated successfully");
+     setRefresh(!refresh);
+     setEditOpen(false);
+     setCurrentRow(null);
+      setRefresh(!refresh);
     } catch (error) {
       toast.error(error?.response?.data?.error||error?.response?.data?.message||"Failed to update data");
     }
@@ -225,9 +237,11 @@ const TableViewerPage = ({ menu }) => {
       flex: 1,
     })) || [];
 
+    console.log("User role:", role);
+    console.log("Access level:", access_level);
   // Permission check
-  const canWrite = role!=="user"||(role === "user" && access_level === "write");
-
+  const canWrite = role!=="user"||(role === "user" && access_level?.access === "write");
+console.log("Can write:", canWrite);
   // Base columns
   const baseColumns = [
     ...dynamicCols,
@@ -293,7 +307,7 @@ const TableViewerPage = ({ menu }) => {
             startIcon={<AddIcon />}
             onClick={handleAddNewRecord}
             // disabled={!hasForm}
-            disabled={!hasForm||(role==="user"&&access_level!=="write")}
+            disabled={!hasForm||(role==="user"&&access_level?.access!=="write")}
           >
             Add
           </Button>

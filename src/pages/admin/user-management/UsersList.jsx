@@ -27,7 +27,6 @@ import {
   Lock as LockIcon,
   LockOpen as LockOpenIcon,
   ClearAll as ClearAllIcon,
-  InfoOutlined as InfoOutlinedIcon,
 } from "@mui/icons-material";
 import toast from "react-hot-toast";
 import Swal from "sweetalert2";
@@ -35,6 +34,103 @@ import Swal from "sweetalert2";
 import { MenuContext } from "../../../context/MenuContext";
 import useApi from "../../../context/useApi";
 import { apiEndpoints } from "../../../api/endpoints";
+
+/* ================= HELPERS ================= */
+
+const normalizeAccessLevel = (al) => {
+  if (!al) return null;
+  if (typeof al === "string") return { access: al, dataToShow: "own" };
+  return { access: al.access, dataToShow: al.dataToShow || "own" };
+};
+
+const buildTitleToIdMap = (tabs) => {
+  const map = {};
+  const walk = (list) => {
+    list.forEach((m) => {
+      map[m.title] = m.id;
+      if (m.children?.length) walk(m.children);
+    });
+  };
+  walk(tabs);
+  return map;
+};
+
+const flattenAccessLevels = (accessLevels, titleToId) => {
+  const result = [];
+  const walk = (list = []) => {
+    list.forEach((n) => {
+      const menuId = titleToId[n.title];
+      const norm = normalizeAccessLevel(n.access_level);
+      if (menuId && norm) {
+        result.push({
+          accessLevel: menuId,
+          access: norm.access,
+          dataToShow: norm.dataToShow,
+        });
+      }
+      if (n.children?.length) walk(n.children);
+    });
+  };
+  walk(accessLevels);
+  return result;
+};
+
+const normalizePermission = (p) => (p === "read_write" ? "write" : p);
+
+const getPermissionFromNode = (node) => {
+  const al = node?.access_level;
+  if (!al) return "none";
+  if (typeof al === "string") return al;
+  return al.access || "none";
+};
+
+const getScopeFromNode = (node) =>
+  typeof node?.access_level === "object" ? node.access_level.dataToShow : null;
+
+const renderViewTree = (node, level = 0) => {
+  const permission = normalizePermission(getPermissionFromNode(node));
+  const scope = getScopeFromNode(node);
+
+  return (
+    <Box key={node.title} sx={{ ml: level * 3, mt: 1 }}>
+      <Box display="flex" alignItems="center" gap={1}>
+        <Typography sx={{ flex: 1, fontWeight: level === 0 ? 600 : 400 }}>
+          {node.title}
+        </Typography>
+
+        {permission !== "none" && (
+          <Chip
+            size="small"
+            label={permission.toUpperCase()}
+            color={permission === "write" ? "success" : "info"}
+            variant="outlined"
+          />
+        )}
+
+        {scope && (
+          <Tooltip
+            title={
+              scope === "all"
+                ? "User can see all users & admin data"
+                : "User can see only their own data"
+            }
+          >
+            <Chip
+              size="small"
+              label={scope === "all" ? "ALL DATA" : "OWN DATA"}
+              color={scope === "all" ? "warning" : "default"}
+              variant="outlined"
+            />
+          </Tooltip>
+        )}
+      </Box>
+
+      {node.children?.map((c) => renderViewTree(c, level + 1))}
+    </Box>
+  );
+};
+
+/* ================= COMPONENT ================= */
 
 export default function UserList() {
   const { menus } = useContext(MenuContext);
@@ -49,11 +145,13 @@ export default function UserList() {
   const [rows, setRows] = useState([]);
   const [openForm, setOpenForm] = useState(false);
   const [openAccessView, setOpenAccessView] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [viewAccessData, setViewAccessData] = useState([]);
 
   const [isEdit, setIsEdit] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [viewAccessData, setViewAccessData] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [errors, setErrors] = useState({});
 
   const [formData, setFormData] = useState({
     name: "",
@@ -64,12 +162,11 @@ export default function UserList() {
     access_level: [],
   });
 
-  /* ================= FETCH USERS ================= */
+  /* ================= FETCH ================= */
+
   const fetchUsers = async () => {
     if (!tenantId) return;
-
     const res = await getUsersApi.execute(tenantId);
-
     setRows(
       (res?.data || []).map((u) => ({
         id: u.userId,
@@ -85,28 +182,26 @@ export default function UserList() {
     fetchUsers();
   }, [tenantId]);
 
-  /* ================= HELPERS ================= */
-  const normalizePermission = (p) => (p === "read_write" ? "write" : p);
+  /* ================= ACCESS HELPERS ================= */
 
   const getAccess = (id) =>
     formData.access.find((a) => a.accessLevel === id)?.access || "none";
 
-  const getDataScope = (id) =>
+  const getScope = (id) =>
     formData.access.find((a) => a.accessLevel === id)?.dataToShow || "own";
 
-  const hasDirectAccess = (id) =>
-    formData.access.some((a) => a.accessLevel === id);
-
   const hasChildAccess = (menu) =>
-    menu.children?.some((child) => hasDirectAccess(child.id));
+    menu.children?.some((c) => getAccess(c.id) !== "none");
 
-  const getMenuDisplayAccess = (menu) => {
-    if (hasDirectAccess(menu.id)) return getAccess(menu.id);
+  const getMenuAccess = (menu) => {
+    const own = getAccess(menu.id);
+    if (own !== "none") return own;
     if (hasChildAccess(menu)) return "read";
     return "none";
   };
 
-  /* ================= ACCESS CHANGE ================= */
+  /* ================= ACCESS HANDLERS ================= */
+
   const handleAccessChange = (node, accessType) => {
     setFormData((prev) => {
       let access = prev.access.filter((a) => a.accessLevel !== node.id);
@@ -116,16 +211,28 @@ export default function UserList() {
         access.push({
           accessLevel: node.id,
           access: accessType,
-          dataToShow: accessType === "write" ? "all" : "own",
+          dataToShow: "own",
         });
         access_level.push(node.id);
       }
 
       return { ...prev, access, access_level };
     });
+
+    setErrors((p) => ({ ...p, access: undefined }));
+  };
+
+  const handleScopeChange = (node, scope) => {
+    setFormData((prev) => ({
+      ...prev,
+      access: prev.access.map((a) =>
+        a.accessLevel === node.id ? { ...a, dataToShow: scope } : a
+      ),
+    }));
   };
 
   /* ================= SHORTCUTS ================= */
+
   const applyAccessToAll = (type) => {
     const access = [];
     const access_level = [];
@@ -135,7 +242,7 @@ export default function UserList() {
         access.push({
           accessLevel: m.id,
           access: type,
-          dataToShow: type === "write" ? "all" : "own",
+          dataToShow: "own",
         });
         access_level.push(m.id);
         if (m.children?.length) walk(m.children);
@@ -144,22 +251,25 @@ export default function UserList() {
 
     walk(tabs);
     setFormData((p) => ({ ...p, access, access_level }));
+    setErrors((p) => ({ ...p, access: undefined }));
   };
 
-  const applyDataScopeToAll = (scope) => {
+  const applyScopeToAll = (scope) => {
     setFormData((p) => ({
       ...p,
       access: p.access.map((a) => ({ ...a, dataToShow: scope })),
     }));
   };
 
-  const clearAllAccess = () =>
+  const clearAll = () =>
     setFormData((p) => ({ ...p, access: [], access_level: [] }));
 
-  /* ================= ADD ================= */
+  /* ================= ADD / EDIT ================= */
+
   const handleAdd = () => {
     setIsEdit(false);
     setSelectedUser(null);
+    setErrors({});
     setFormData({
       name: "",
       email: "",
@@ -171,36 +281,13 @@ export default function UserList() {
     setOpenForm(true);
   };
 
-  /* ================= EDIT (REBUILD FROM accessLevels) ================= */
   const handleEdit = (row) => {
     setIsEdit(true);
     setSelectedUser(row);
+    setErrors({});
 
-    const titleToId = {};
-    const mapMenus = (list) => {
-      list.forEach((m) => {
-        titleToId[m.title] = m.id;
-        if (m.children?.length) mapMenus(m.children);
-      });
-    };
-    mapMenus(tabs);
-
-    const rebuiltAccess = [];
-    const walkLevels = (levels = []) => {
-      levels.forEach((l) => {
-        const id = titleToId[l.title];
-        if (id) {
-          const perm = normalizePermission(l.access_level);
-          rebuiltAccess.push({
-            accessLevel: id,
-            access: perm,
-            dataToShow: perm === "write" ? "all" : "own",
-          });
-        }
-        if (l.children?.length) walkLevels(l.children);
-      });
-    };
-    walkLevels(row.accessLevels || []);
+    const titleToId = buildTitleToIdMap(tabs);
+    const rebuiltAccess = flattenAccessLevels(row.accessLevels || [], titleToId);
 
     setFormData({
       name: row.name,
@@ -208,15 +295,16 @@ export default function UserList() {
       phone: row.phone,
       status: row.status,
       access: rebuiltAccess,
-      access_level: row.access_level || [],
+      access_level: rebuiltAccess.map((a) => a.accessLevel),
     });
 
     setOpenForm(true);
   };
 
   /* ================= DELETE ================= */
+
   const handleDelete = async (row) => {
-    const result = await Swal.fire({
+    const res = await Swal.fire({
       title: "Delete user?",
       text: "This action cannot be undone",
       icon: "warning",
@@ -225,15 +313,47 @@ export default function UserList() {
       confirmButtonText: "Yes, delete",
     });
 
-    if (!result.isConfirmed) return;
+    if (!res.isConfirmed) return;
 
     await deleteUserApi.execute(row.userId);
     toast.success("User deleted");
     fetchUsers();
   };
 
+  /* ================= VALIDATION ================= */
+
+  const validateForm = () => {
+    const e = {};
+
+    if (!formData.name.trim()) e.name = "Name is required";
+    if (!formData.email.trim()) {
+      e.email = "Email is required";
+    } else if (!/^\S+@\S+\.\S+$/.test(formData.email)) {
+      e.email = "Invalid email address";
+    }
+
+    if (!formData.phone.trim()) {
+      e.phone = "Phone is required";
+    } else if (!/^\d{10}$/.test(formData.phone)) {
+      e.phone = "Phone must be 10 digits";
+    }
+
+    if (!formData.access.length) {
+      e.access = "At least one permission is required";
+    }
+
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
   /* ================= SAVE ================= */
+
   const handleSave = async () => {
+    if (!validateForm()) {
+      toast.error("Please fix validation errors");
+      return;
+    }
+
     try {
       setIsSaving(true);
 
@@ -259,71 +379,8 @@ export default function UserList() {
     }
   };
 
-
-  const getViewDataScope = (menuTitle) => {
-  // build title -> id map once
-  const titleToId = {};
-  const walk = (list) => {
-    list.forEach((m) => {
-      titleToId[m.title] = m.id;
-      if (m.children?.length) walk(m.children);
-    });
-  };
-  walk(tabs);
-
-  const menuId = titleToId[menuTitle];
-  if (!menuId) return null;
-
-  return (
-    selectedUser?.access?.find((a) => a.accessLevel === menuId)?.dataToShow ||
-    null
-  );
-};
-
-
- const renderViewTree = (node, level = 0) => {
-  const scope = getViewDataScope(node.title);
-
-  return (
-    <Box key={node.title} sx={{ ml: level * 3, mt: 1 }}>
-      <Box display="flex" alignItems="center" gap={1}>
-        <Typography sx={{ flex: 1, fontWeight: level === 0 ? 600 : 400 }}>
-          {node.title}
-        </Typography>
-
-        {/* Permission chip */}
-        <Chip
-          size="small"
-          label={normalizePermission(node.access_level).toUpperCase()}
-          color={normalizePermission(node.access_level) === "write" ? "success" : "info"}
-          variant="outlined"
-        />
-
-        {/* Data scope chip */}
-        {scope && (
-          <Tooltip
-            title={
-              scope === "all"
-                ? "User can see all users & admin data"
-                : "User can see only their own data"
-            }
-          >
-            <Chip
-              size="small"
-              label={scope === "all" ? "ALL DATA" : "OWN DATA"}
-              color={scope === "all" ? "warning" : "default"}
-              variant="outlined"
-            />
-          </Tooltip>
-        )}
-      </Box>
-
-      {node.children?.map((c) => renderViewTree(c, level + 1))}
-    </Box>
-  );
-};
-
   /* ================= TABLE ================= */
+
   const columns = [
     { field: "name", headerName: "Name", flex: 1 },
     { field: "email", headerName: "Email", flex: 1.5 },
@@ -335,15 +392,15 @@ export default function UserList() {
       width: 120,
       renderCell: (p) => (
         <Chip
-          label={p.value === "active" ? "Active" : "Inactive"}
           size="small"
+          label={p.value === "active" ? "Active" : "Inactive"}
           color={p.value === "active" ? "success" : "error"}
           variant="outlined"
         />
       ),
     },
     {
-      field: "accessView",
+      field: "access",
       headerName: "Access",
       width: 120,
       renderCell: (p) => (
@@ -377,6 +434,7 @@ export default function UserList() {
   ];
 
   /* ================= RENDER ================= */
+
   return (
     <Paper sx={{ p: 3 }}>
       <Box display="flex" justifyContent="space-between" mb={2}>
@@ -396,20 +454,52 @@ export default function UserList() {
         <DialogContent dividers>
           <Grid container spacing={2}>
             <Grid item xs={6}>
-              <TextField fullWidth label="Name" value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+              <TextField
+                fullWidth
+                label="Name"
+                value={formData.name}
+                error={!!errors.name}
+                helperText={errors.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
+              />
             </Grid>
             <Grid item xs={6}>
-              <TextField fullWidth label="Email" value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={formData.email}
+                error={!!errors.email}
+                helperText={errors.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+              />
             </Grid>
             <Grid item xs={6}>
-              <TextField fullWidth label="Phone" value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+              <TextField
+                fullWidth
+                label="Phone"
+                value={formData.phone}
+                error={!!errors.phone}
+                helperText={errors.phone}
+                onChange={(e) =>
+                  setFormData({ ...formData, phone: e.target.value })
+                }
+              />
             </Grid>
             <Grid item xs={6}>
-              <TextField select fullWidth label="Status" value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
+              <TextField
+                select
+                fullWidth
+                label="Status"
+                value={formData.status}
+                onChange={(e) =>
+                  setFormData({ ...formData, status: e.target.value })
+                }
+              >
                 <MenuItem value="active">Active</MenuItem>
                 <MenuItem value="inactive">Inactive</MenuItem>
               </TextField>
@@ -418,42 +508,53 @@ export default function UserList() {
 
           <Divider sx={{ my: 3 }} />
 
+          {errors.access && (
+            <Typography color="error" mb={1}>
+              {errors.access}
+            </Typography>
+          )}
+
           {/* SHORTCUTS */}
-          <Box display="flex" justifyContent="flex-end" mb={1}>
-            <Stack direction="row" spacing={1}>
-              <Button size="small" onClick={() => applyAccessToAll("read")} startIcon={<LockOpenIcon />}>
-                Grant All Read
-              </Button>
-              <Button size="small" onClick={() => applyAccessToAll("write")} startIcon={<LockIcon />}>
-                Grant All Write
-              </Button>
-              <Button size="small" color="error" onClick={clearAllAccess} startIcon={<ClearAllIcon />}>
-                Clear All
-              </Button>
-            </Stack>
-          </Box>
+          <Stack direction="row" spacing={1} mb={2} justifyContent="flex-end">
+            <Button size="small" onClick={() => applyAccessToAll("read")} startIcon={<LockOpenIcon />}>
+              Grant All Read
+            </Button>
+            <Button size="small" onClick={() => applyAccessToAll("write")} startIcon={<LockIcon />}>
+              Grant All Write
+            </Button>
+            <Button size="small" color="error" onClick={clearAll} startIcon={<ClearAllIcon />}>
+              Clear All
+            </Button>
+          </Stack>
 
-          <Box display="flex" justifyContent="flex-end" mb={2}>
-            <Stack direction="row" spacing={1}>
-              <Button size="small" variant="outlined" onClick={() => applyDataScopeToAll("own")}>
-                Set All → Own Data
-              </Button>
-              <Button size="small" variant="outlined" onClick={() => applyDataScopeToAll("all")}>
-                Set All → All Data
-              </Button>
-            </Stack>
-          </Box>
+          <Stack direction="row" spacing={1} mb={2} justifyContent="flex-end">
+  <Button
+    size="small"
+    variant="outlined"
+    onClick={() => applyScopeToAll("own")}
+  >
+    Set All → Own Data
+  </Button>
 
-          {/* PERMISSIONS */}
+  <Button
+    size="small"
+    variant="outlined"
+    onClick={() => applyScopeToAll("all")}
+  >
+    Set All → All Data
+  </Button>
+</Stack>
+
+
           <Stack spacing={2}>
             {tabs.map((menu) => (
               <Paper key={menu.id} variant="outlined" sx={{ p: 2 }}>
-                <Box display="flex" alignItems="center" gap={2}>
+                <Box display="flex" gap={2}>
                   <Typography sx={{ flex: 1 }}>{menu.title}</Typography>
 
                   <Select
                     size="small"
-                    value={getMenuDisplayAccess(menu)}
+                    value={getMenuAccess(menu)}
                     onChange={(e) => handleAccessChange(menu, e.target.value)}
                   >
                     <MenuItem value="none">No Access</MenuItem>
@@ -461,33 +562,21 @@ export default function UserList() {
                     <MenuItem value="write">Write</MenuItem>
                   </Select>
 
-                  {getMenuDisplayAccess(menu) !== "none" && (
-                    // <Tooltip title="Controls whose data the user can see">
-                      <Select
-                        size="small"
-                        value={getDataScope(menu.id)}
-                        onChange={(e) =>
-                          setFormData((p) => ({
-                            ...p,
-                            access: p.access.map((a) =>
-                              a.accessLevel === menu.id
-                                ? { ...a, dataToShow: e.target.value }
-                                : a
-                            ),
-                          }))
-                        }
-                      >
-                        <MenuItem value="own">Own Data</MenuItem>
-                        <MenuItem value="all">All Data</MenuItem>
-                      </Select>
-                    // </Tooltip>
+                  {getMenuAccess(menu) !== "none" && (
+                    <Select
+                      size="small"
+                      value={getScope(menu.id)}
+                      onChange={(e) => handleScopeChange(menu, e.target.value)}
+                    >
+                      <MenuItem value="own">Own</MenuItem>
+                      <MenuItem value="all">All</MenuItem>
+                    </Select>
                   )}
                 </Box>
 
                 {menu.children?.map((c) => (
-                  <Box key={c.id} display="flex" ml={4} mt={1} gap={2}>
+                  <Box key={c.id} ml={4} mt={1} display="flex" gap={2}>
                     <Typography sx={{ flex: 1 }}>{c.title}</Typography>
-
                     <Select
                       size="small"
                       value={getAccess(c.id)}
@@ -499,25 +588,14 @@ export default function UserList() {
                     </Select>
 
                     {getAccess(c.id) !== "none" && (
-                      // <Tooltip title="Controls whose data the user can see">
-                        <Select
-                          size="small"
-                          value={getDataScope(c.id)}
-                          onChange={(e) =>
-                            setFormData((p) => ({
-                              ...p,
-                              access: p.access.map((a) =>
-                                a.accessLevel === c.id
-                                  ? { ...a, dataToShow: e.target.value }
-                                  : a
-                              ),
-                            }))
-                          }
-                        >
-                          <MenuItem value="own">Own Data</MenuItem>
-                          <MenuItem value="all">All Data</MenuItem>
-                        </Select>
-                      // </Tooltip>
+                      <Select
+                        size="small"
+                        value={getScope(c.id)}
+                        onChange={(e) => handleScopeChange(c, e.target.value)}
+                      >
+                        <MenuItem value="own">Own</MenuItem>
+                        <MenuItem value="all">All</MenuItem>
+                      </Select>
                     )}
                   </Box>
                 ))}
@@ -538,9 +616,11 @@ export default function UserList() {
       <Dialog open={openAccessView} onClose={() => setOpenAccessView(false)} fullWidth maxWidth="sm">
         <DialogTitle>User Permissions</DialogTitle>
         <DialogContent dividers>
-          {viewAccessData.length
-            ? viewAccessData.map((n) => renderViewTree(n))
-            : <Typography>No permissions assigned</Typography>}
+          {viewAccessData.length ? (
+            viewAccessData.map((n) => renderViewTree(n))
+          ) : (
+            <Typography>No permissions assigned</Typography>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenAccessView(false)}>Close</Button>
